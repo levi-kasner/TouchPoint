@@ -35,6 +35,9 @@ MENU_XML_NAME = "ReportsMenuAdmin.xml"
 MENU_LINK = "/PyScriptForm/ShellEditor"
 MENU_ROLES = "Admin,SpecialContentFull"
 MENU_LABEL = "Shell Editor"
+MENU_NEW_HEADER_ROLES = "Admin"
+MENU_MAX_COLUMNS = 4
+MENU_COLUMN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-./]{0,60}$")
 
 STEPS = ["welcome", "files", "registration", "giving", "login", "menu", "done"]
 
@@ -3418,45 +3421,145 @@ def set_org_reg_shell(orgid, shell_name):
 def menu_has_editor(xml):
     return bool(re.search(r"ShellEditor", xml or "", re.I))
 
-def add_menu_entry(xml):
-    xml = xml or ""
-    if menu_has_editor(xml):
-        return xml, False
-    entry = (
+def menu_report_entry():
+    return (
         '<Report link="' + MENU_LINK + '" roles="' + MENU_ROLES + '">'
         + MENU_LABEL + "</Report>"
     )
-    # Prefer inserting under an existing Header named Custom / Tools / Reports.
-    m = re.search(
-        r"(<(?:Header)[^>]*>\s*(?:Custom|Tools|Reports)\s*</Header>\s*)",
-        xml, flags=re.I,
+
+def _strip_xml_text(s):
+    s = re.sub(r"<[^>]+>", "", s or "")
+    return re.sub(r"\s+", " ", s).strip()
+
+def find_menu_column(xml, num):
+    """Return regex match for <ColumnN>...</ColumnN>, or None."""
+    tag = "Column" + str(int(num))
+    return re.search(
+        r"<" + tag + r"\b([^>]*)>(.*?)</" + tag + r">",
+        xml or "",
+        re.I | re.S,
     )
-    if m:
-        return xml[: m.end()] + "\n    " + entry + xml[m.end() :], True
-    # Else before first column close.
-    m = re.search(r"</Column>", xml, flags=re.I)
-    if m:
-        return xml[: m.start()] + "    " + entry + "\n  " + xml[m.start() :], True
-    # Else before root close.
-    m = re.search(r"</ReportsMenu>", xml, flags=re.I)
-    if m:
-        return (
-            xml[: m.start()]
-            + "  <Column>\n    <Header>Custom</Header>\n    "
-            + entry + "\n  </Column>\n"
-            + xml[m.start() :],
-            True,
+
+def list_menu_columns(xml):
+    """Return [{num, label}] for each Column1..Column4 present in the menu."""
+    cols = []
+    for num in range(1, MENU_MAX_COLUMNS + 1):
+        m = find_menu_column(xml, num)
+        if not m:
+            continue
+        body = m.group(2) or ""
+        headers = [
+            _strip_xml_text(h)
+            for h in re.findall(r"<Header\b[^>]*>(.*?)</Header>", body, re.I | re.S)
+        ]
+        headers = [h for h in headers if h]
+        label = headers[0] if headers else ("Column " + str(num))
+        if len(headers) > 1:
+            label = label + " (" + str(len(headers)) + " sections)"
+        cols.append({"num": num, "label": label})
+    return cols
+
+def next_menu_column_num(xml):
+    """Lowest free ColumnN slot (1-4), or None when all four are used."""
+    used = set()
+    for num in range(1, MENU_MAX_COLUMNS + 1):
+        if find_menu_column(xml, num):
+            used.add(num)
+    for num in range(1, MENU_MAX_COLUMNS + 1):
+        if num not in used:
+            return num
+    return None
+
+def valid_menu_column_name(name):
+    return bool(name and MENU_COLUMN_NAME_RE.match(name.strip()))
+
+def add_menu_entry(xml, column_choice, new_column_name=""):
+    """Insert Shell Editor into an existing ColumnN or a new ColumnN slot.
+
+    column_choice: '1'..'4' for an existing column, or 'new'.
+    New columns use <ColumnN> with <Header roles="Admin">...</Header>.
+    Returns (xml, changed, message).
+    """
+    xml = xml or ""
+    if menu_has_editor(xml):
+        return xml, False, "Shell Editor was already present in the admin reports menu."
+    entry = menu_report_entry()
+    choice = (column_choice or "").strip().lower()
+
+    if choice == "new":
+        name = (new_column_name or "").strip()
+        if not valid_menu_column_name(name):
+            return (
+                xml,
+                False,
+                "Enter a column name using letters, numbers, spaces, or - _ . /",
+            )
+        num = next_menu_column_num(xml)
+        if num is None:
+            return (
+                xml,
+                False,
+                "The Admin reports menu already has four columns. "
+                "Choose an existing column instead.",
+            )
+        tag = "Column" + str(num)
+        block = (
+            "  <" + tag + ">\n"
+            '    <Header roles="' + MENU_NEW_HEADER_ROLES + '">'
+            + esc(name) + "</Header>\n"
+            "    " + entry + "\n"
+            "  </" + tag + ">\n"
         )
-    # Empty / unknown — create a minimal menu file.
-    return (
-        '<?xml version="1.0" encoding="utf-8" ?>\n'
-        "<ReportsMenu>\n"
-        "  <Column>\n"
-        "    <Header>Custom</Header>\n"
-        "    " + entry + "\n"
-        "  </Column>\n"
-        "</ReportsMenu>\n"
-    ), True
+        m = re.search(r"</ReportsMenu>", xml, flags=re.I)
+        if m:
+            updated = xml[: m.start()] + block + xml[m.start() :]
+        elif re.search(r"<ReportsMenu\b", xml, re.I):
+            updated = xml.rstrip() + "\n" + block
+        else:
+            updated = (
+                '<?xml version="1.0" encoding="utf-8" ?>\n'
+                "<ReportsMenu>\n"
+                + block
+                + "</ReportsMenu>\n"
+            )
+        return updated, True, 'Added Shell Editor under new column "' + name + '".'
+
+    try:
+        num = int(choice)
+    except Exception:
+        return xml, False, "Select a menu column, or choose to create a new column."
+    if num < 1 or num > MENU_MAX_COLUMNS:
+        return xml, False, "Select a menu column, or choose to create a new column."
+
+    m = find_menu_column(xml, num)
+    if not m:
+        return xml, False, "That menu column is no longer available. Refresh and try again."
+
+    tag = "Column" + str(num)
+    col_attrs = m.group(1) or ""
+    col_body = m.group(2) or ""
+    # Prefer placing under the first header in the column; else at end of column.
+    hm = re.search(r"<Header\b[^>]*>.*?</Header>\s*", col_body, re.I | re.S)
+    if hm:
+        new_body = (
+            col_body[: hm.end()] + "\n    " + entry + col_body[hm.end() :]
+        )
+    else:
+        new_body = col_body.rstrip() + "\n    " + entry + "\n  "
+    updated = (
+        xml[: m.start()]
+        + "<" + tag + col_attrs + ">"
+        + new_body
+        + "</" + tag + ">"
+        + xml[m.end() :]
+    )
+    cols = list_menu_columns(xml)
+    label = ("Column " + str(num))
+    for c in cols:
+        if c["num"] == num:
+            label = c["label"]
+            break
+    return updated, True, 'Added Shell Editor to "' + label + '".'
 
 def read_menu_xml():
     try:
@@ -3615,18 +3718,20 @@ def action_skip_login():
     set_flag(CFG_LOGIN_INSTALLED, False)
     return True, "Login module skipped. You can install it later from the editor."
 
-def action_configure_menu(add_it):
+def action_configure_menu(add_it, column_choice="", new_column_name=""):
     if not add_it:
         set_flag(CFG_MENU_INSTALLED, False)
         return True, "Menu entry skipped."
     xml = read_menu_xml()
-    updated, changed = add_menu_entry(xml)
-    if changed:
-        write_menu_xml(updated)
+    if menu_has_editor(xml):
         set_flag(CFG_MENU_INSTALLED, True)
-        return True, "Added Shell Editor to " + MENU_XML_NAME + "."
+        return True, "Shell Editor was already present in the admin reports menu."
+    updated, changed, msg = add_menu_entry(xml, column_choice, new_column_name)
+    if not changed:
+        return False, msg
+    write_menu_xml(updated)
     set_flag(CFG_MENU_INSTALLED, True)
-    return True, "Shell Editor was already present in the admin reports menu."
+    return True, msg
 
 # ========================= UI =========================
 STYLES = """
@@ -3655,6 +3760,8 @@ STYLES = """
 .sei-reg-selected.on{display:block;}
 .sei-check{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;margin:10px 0;}
 .sei-check input{margin-top:3px;}
+.sei-menu-opts{margin:12px 0 0;padding:12px;border:1px solid #e2e2e2;border-radius:8px;background:#fafafa;}
+.sei-menu-opts[hidden]{display:none !important;}
 .sei-code{font-family:Consolas,monospace;font-size:12px;background:#f5f5f5;padding:1px 5px;border-radius:4px;}
 .sei-list{margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;}
 </style>
@@ -3877,24 +3984,77 @@ def render_login():
     )
 
 def render_menu():
-    present = menu_has_editor(read_menu_xml())
+    xml = read_menu_xml()
+    present = menu_has_editor(xml)
+    cols = list_menu_columns(xml)
+    if present:
+        return (
+            '<div class="sei-alert ok">Shell Editor is already in the Admin reports menu.'
+            "</div>"
+            '<form method="post" class="sei-form" id="sei-menu-form">'
+            '<input type="hidden" name="step" value="menu" />'
+            '<input type="hidden" name="add_menu" value="1" />'
+            '<div class="sei-actions">'
+            '<button class="btn btn-primary" type="submit" name="action" value="configure_menu">'
+            "Continue</button>"
+            "</div></form>"
+        )
+
+    can_create = next_menu_column_num(xml) is not None
     note = (
-        '<div class="sei-alert ok">A Shell Editor menu entry already exists in '
-        + esc(MENU_XML_NAME) + ".</div>"
-        if present else
-        "<p>Add a link to the editor under Admin reports "
-        "(<span class='sei-code'>" + esc(MENU_XML_NAME) + "</span>).</p>"
+        "<p>Optionally add <strong>" + esc(MENU_LABEL)
+        + "</strong> to the Admin reports menu. Choose an existing column"
+        + (", or create a new one." if can_create else ".")
+        + "</p>"
     )
+    options = ['<option value="">Select a column…</option>']
+    for c in cols:
+        options.append(
+            '<option value="' + esc(str(c["num"])) + '">'
+            + esc(c["label"]) + "</option>"
+        )
+    if can_create:
+        options.append('<option value="new">Create new column…</option>')
+    empty = ""
+    if not cols:
+        empty = (
+            '<div class="sei-alert info">No columns were found in the Admin reports '
+            "menu yet. Create a new column to continue.</div>"
+        )
+    elif not can_create:
+        empty = (
+            '<div class="sei-alert info">All four menu columns are in use. '
+            "Choose one of the existing columns.</div>"
+        )
+    new_row = ""
+    if can_create:
+        new_row = (
+            '<div class="sei-row" id="sei-menu-new-row" hidden>'
+            '<label class="sei-label" for="sei-menu-new-name">New column name</label>'
+            '<input class="sei-search" id="sei-menu-new-name" name="new_column_name" '
+            'type="text" maxlength="60" placeholder="e.g. Shell Tools" autocomplete="off" />'
+            '<p class="sei-help">The new column header is limited to the Admin role.'
+            "</p>"
+            "</div>"
+        )
     return (
         note
-        + '<form method="post" class="sei-form">'
+        + empty
+        + '<form method="post" class="sei-form" id="sei-menu-form">'
         '<input type="hidden" name="step" value="menu" />'
         '<label class="sei-check">'
-        '<input type="checkbox" name="add_menu" value="1"'
-        + (" checked" if not present else "") + " />"
-        "<span>Add <strong>" + esc(MENU_LABEL) + "</strong> to the Admin reports menu "
-        "(roles: " + esc(MENU_ROLES) + ")</span>"
+        '<input type="checkbox" name="add_menu" id="sei-add-menu" value="1" checked />'
+        "<span>Add <strong>" + esc(MENU_LABEL) + "</strong> to the Admin reports menu</span>"
         "</label>"
+        '<div class="sei-menu-opts" id="sei-menu-opts">'
+        '<div class="sei-row">'
+        '<label class="sei-label" for="sei-menu-column">Menu column</label>'
+        '<select class="sei-select" id="sei-menu-column" name="menu_column">'
+        + "".join(options) + "</select>"
+        '<p class="sei-help">Existing columns come from your Admin reports menu.</p>'
+        "</div>"
+        + new_row
+        + "</div>"
         '<div class="sei-actions">'
         '<button class="btn btn-primary" type="submit" name="action" value="configure_menu">'
         "Continue</button>"
@@ -3977,6 +4137,24 @@ SCRIPT = r"""
       if(!rid || !rid.value){
         alert('Select a registration involvement to copy settings from.');
         return;
+      }
+    }
+    if(form.id==='sei-menu-form'){
+      var addMenu=document.getElementById('sei-add-menu');
+      if(addMenu && addMenu.checked){
+        var col=document.getElementById('sei-menu-column');
+        var colVal=col?String(col.value||''):'';
+        if(!colVal){
+          alert('Select a menu column, or choose to create a new column.');
+          return;
+        }
+        if(colVal==='new'){
+          var nm=document.getElementById('sei-menu-new-name');
+          if(!nm || !String(nm.value||'').trim()){
+            alert('Enter a name for the new menu column.');
+            return;
+          }
+        }
       }
     }
     var body=new FormData(form);
@@ -4067,6 +4245,28 @@ SCRIPT = r"""
       if(opt && opt.value) collapseRegList(opt);
     });
   }
+  var addMenu=document.getElementById('sei-add-menu');
+  var menuOpts=document.getElementById('sei-menu-opts');
+  var menuCol=document.getElementById('sei-menu-column');
+  var menuNewRow=document.getElementById('sei-menu-new-row');
+  function syncMenuUi(){
+    var on=!!(addMenu && addMenu.checked);
+    if(menuOpts){
+      if(on) menuOpts.removeAttribute('hidden');
+      else menuOpts.setAttribute('hidden','hidden');
+    }
+    if(menuNewRow){
+      if(on && menuCol && menuCol.value==='new') menuNewRow.removeAttribute('hidden');
+      else menuNewRow.setAttribute('hidden','hidden');
+    }
+  }
+  if(addMenu){
+    addMenu.addEventListener('change', syncMenuUi);
+    syncMenuUi();
+  }
+  if(menuCol){
+    menuCol.addEventListener('change', syncMenuUi);
+  }
   var give=document.getElementById('sei-give-select');
   if(give){
     function refreshGiving(){
@@ -4151,9 +4351,13 @@ try:
                 next_step = "menu"
             elif action == "configure_menu":
                 add_it = request_val("add_menu") in ("1", "true", "on", "yes")
-                ok, msg = action_configure_menu(add_it)
+                ok, msg = action_configure_menu(
+                    add_it,
+                    request_val("menu_column"),
+                    request_val("new_column_name"),
+                )
                 notice, notice_kind = msg, ("ok" if ok else "err")
-                next_step = "done"
+                next_step = "done" if ok else "menu"
             else:
                 ok = False
                 notice = "Unknown installer action."
