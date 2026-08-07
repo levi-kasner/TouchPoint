@@ -1,0 +1,24 @@
+---
+description: TouchPoint Special Content constraints for Shell Editor scripts
+alwaysApply: true
+---
+
+# TouchPoint Special Content
+
+These Python scripts run as TouchPoint Special Content / PyScriptForm code.
+
+## SQL is read-only
+
+- Special Content may use **read-only** SQL only (`q.QuerySql`, `q.QuerySqlTop1`, SELECT).
+- Do **not** use `model.ExecuteSql` or any INSERT/UPDATE/DELETE SQL. Writes fail (often as a generic `System.Exception`).
+- Persist changes through TouchPoint model/API helpers instead, for example:
+  - `model.WriteContentHtml` / `model.WriteContentPython` / `model.WriteContentText`
+  - `model.SetSetting`
+  - `model.AddOrganization`
+  - Browser or `model.RestGet` / `model.RestPostJson` calls to official endpoints (e.g. `/api/v1/Involvements/{id}/Registrations/Settings` for `regShellId`)
+
+## PyScriptForm rendering
+
+- `model.Form`, `model.Styles`, and `model.Script` are for **GET** page loads.
+- Full-page form POSTs will not paint `model.Form` (blank page). Use GET navigation and/or AJAX POST that returns JSON/`print` output, then navigate with GET.
+- Wrap CSS in `<style>` tags when assigning `model.Styles`.

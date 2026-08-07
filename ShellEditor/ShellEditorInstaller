@@ -3394,44 +3394,26 @@ ORDER BY o.OrganizationName
         rows = []
     return rows
 
+def registration_settings_url(orgid):
+    host = str(getattr(model, "CmsHost", "") or "").rstrip("/")
+    return host + "/api/v1/Involvements/" + str(int(orgid)) + "/Registrations/Settings"
+
 def set_org_reg_shell(orgid, shell_name):
+    """Pin a registration shell using the same Settings API the editor uses."""
     orgid = int(orgid)
     shell_name = (shell_name or "").strip()
-    row = q.QuerySqlTop1(
-        "SELECT RegSetting FROM Organizations WHERE OrganizationId = " + str(orgid)
-    )
-    rs = ""
-    if row is not None:
-        rs = str(getattr(row, "RegSetting", "") or "")
-    if re.search(r"<Shell>\s*[^<]*\s*</Shell>", rs, re.I):
-        rs = re.sub(
-            r"<Shell>\s*[^<]*\s*</Shell>",
-            "<Shell>" + shell_name + "</Shell>",
-            rs, count=1, flags=re.I,
-        )
-    elif re.search(r'"regShellId"\s*:\s*"[^"]*"', rs):
-        rs = re.sub(
-            r'"regShellId"\s*:\s*"[^"]*"',
-            '"regShellId":"' + shell_name + '"',
-            rs, count=1,
-        )
-    else:
-        # Prefer XML Shell node when RegSetting looks like XML; else append.
-        if "<" in rs:
-            # Insert after first tag opener if possible.
-            m = re.search(r"(<[A-Za-z][^>]*>)", rs)
-            if m:
-                pos = m.end()
-                rs = rs[:pos] + "<Shell>" + shell_name + "</Shell>" + rs[pos:]
-            else:
-                rs = "<Shell>" + shell_name + "</Shell>" + rs
-        else:
-            rs = (rs + "\n" if rs else "") + "<Shell>" + shell_name + "</Shell>"
-    lit = rs.replace("'", "''")
-    model.ExecuteSql(
-        "UPDATE Organizations SET RegSetting = N'" + lit
-        + "' WHERE OrganizationId = " + str(orgid)
-    )
+    if orgid <= 0 or not shell_name:
+        raise Exception("Missing involvement id or shell name.")
+    url = registration_settings_url(orgid)
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    raw = model.RestGet(url, headers)
+    settings = json.loads(raw or "{}")
+    if not isinstance(settings, dict):
+        raise Exception("Registration settings response was invalid.")
+    if str(settings.get("regShellId") or "").strip() == shell_name:
+        return
+    settings["regShellId"] = shell_name
+    model.RestPostJson(url, headers, settings)
 
 def menu_has_editor(xml):
     return bool(re.search(r"ShellEditor", xml or "", re.I))
@@ -3559,35 +3541,43 @@ def action_install_files():
     return True, "; ".join(results)
 
 def action_configure_registration(template_org_id):
+    """Create preview involvement. Returns (ok, msg, new_id, needs_client_shell_assign)."""
     try:
         tid = int(template_org_id)
     except Exception:
-        return False, "Select a registration involvement to copy settings from."
+        return False, "Select a registration involvement to copy settings from.", 0, False
     if tid <= 0:
-        return False, "Select a registration involvement to copy settings from."
+        return False, "Select a registration involvement to copy settings from.", 0, False
     # Create preview involvement from template (copy settings).
     try:
         new_id = model.AddOrganization(PREVIEW_ORG_NAME, tid, True)
     except Exception as e:
-        return False, "Could not create preview involvement: " + str(e)
+        return False, "Could not create preview involvement: " + str(e), 0, False
     try:
         new_id = int(new_id)
     except Exception:
-        return False, "AddOrganization did not return an involvement id."
+        return False, "AddOrganization did not return an involvement id.", 0, False
     if new_id <= 0:
-        return False, "AddOrganization failed."
+        return False, "AddOrganization failed.", 0, False
     # Ensure registration template exists, then pin it on the new org.
     if not html_exists(REG_TEMPLATE):
         st, msg = action_install_files()
         if not st:
-            return False, msg
+            return False, msg, new_id, False
+    needs_client_assign = False
     try:
         set_org_reg_shell(new_id, REG_TEMPLATE)
-    except Exception as e:
-        return False, "Created involvement " + str(new_id) + " but could not set shell: " + str(e)
+    except Exception:
+        # Browser session can set regShellId via the same API the editor uses.
+        needs_client_assign = True
     set_setting(CFG_INVOLVEMENT_ID, str(new_id))
     set_flag(CFG_REGISTRATION_INSTALLED, True)
-    return True, "Created involvement #" + str(new_id) + " (" + PREVIEW_ORG_NAME + ")."
+    return (
+        True,
+        "Created involvement #" + str(new_id) + " (" + PREVIEW_ORG_NAME + ").",
+        new_id,
+        needs_client_assign,
+    )
 
 def action_configure_giving(page_url):
     page_url = (page_url or "").strip()
@@ -3660,6 +3650,9 @@ STYLES = """
 .sei-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;}
 .sei-search{width:100%;height:34px;margin:0 0 8px;padding:0 10px;box-sizing:border-box;}
 .sei-select{width:100%;min-height:38px;padding:6px 8px;box-sizing:border-box;}
+.sei-select.is-collapsed{display:none;}
+.sei-reg-selected{font-size:12px;color:#1d6b3a;margin:0 0 8px;display:none;}
+.sei-reg-selected.on{display:block;}
 .sei-check{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;margin:10px 0;}
 .sei-check input{margin-top:3px;}
 .sei-code{font-family:Consolas,monospace;font-size:12px;background:#f5f5f5;padding:1px 5px;border-radius:4px;}
@@ -3791,16 +3784,18 @@ def render_registration():
         '<form method="post" class="sei-form" id="sei-reg-form">'
         '<input type="hidden" name="step" value="registration" />'
         '<input type="hidden" name="action" value="configure_registration" />'
+        '<input type="hidden" name="template_org_id" id="sei-reg-id" value="" />'
         '<div class="sei-row">'
-        '<label class="sei-label" for="sei-reg-search">Search involvements</label>'
+        '<label class="sei-label" for="sei-reg-search">Copy settings from</label>'
         '<input class="sei-search" id="sei-reg-search" type="search" '
-        'placeholder="Type to filter…" autocomplete="off" />'
-        '<label class="sei-label" for="sei-reg-select">Copy settings from</label>'
-        '<select class="sei-select" id="sei-reg-select" name="template_org_id" size="10">'
+        'placeholder="Search involvements…" autocomplete="off" />'
+        '<div class="sei-reg-selected" id="sei-reg-selected"></div>'
+        '<select class="sei-select" id="sei-reg-select" size="10" '
+        'aria-label="Registration involvements">'
         + "".join(opts) + "</select>"
         '<p class="sei-help">' + str(len(rows))
         + " active registration form involvement(s) found "
-        "(RegistrationTypeId = 26, currently open).</p>"
+        "(RegistrationTypeId = 26, currently open). Click one to select it.</p>"
         "</div>"
         '<div class="sei-actions">'
         '<button class="btn btn-primary" type="submit">Create preview involvement</button>'
@@ -3950,11 +3945,40 @@ SCRIPT = r"""
     }
     window.location=url;
   }
+  function assignRegShell(orgId, shellName){
+    // Same browser API the Shell Editor uses for registration preview.
+    var settingsUrl='/api/v1/Involvements/'+encodeURIComponent(orgId)+'/Registrations/Settings';
+    return fetch(settingsUrl,{method:'GET',credentials:'same-origin',headers:{'Accept':'application/json'}})
+      .then(function(r){
+        if(!r.ok) throw new Error('Could not load registration settings ('+r.status+')');
+        return r.json();
+      })
+      .then(function(settings){
+        settings=settings||{};
+        if(settings.regShellId===shellName) return;
+        settings.regShellId=shellName;
+        return fetch(settingsUrl,{
+          method:'POST',
+          credentials:'same-origin',
+          headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify(settings)
+        }).then(function(r){
+          if(!r.ok) throw new Error('Could not set registration shell ('+r.status+')');
+        });
+      });
+  }
   // PyScriptForm only paints model.Form on GET. Submit actions via AJAX, then navigate.
   document.addEventListener('submit', function(ev){
     var form=ev.target;
     if(!form || form.tagName!=='FORM' || !form.classList.contains('sei-form')) return;
     ev.preventDefault();
+    if(form.id==='sei-reg-form'){
+      var rid=document.getElementById('sei-reg-id');
+      if(!rid || !rid.value){
+        alert('Select a registration involvement to copy settings from.');
+        return;
+      }
+    }
     var body=new FormData(form);
     var submitter=ev.submitter;
     if(submitter && submitter.name){
@@ -3973,7 +3997,19 @@ SCRIPT = r"""
           goStep(data.step||'welcome', data.notice||'Request failed', data.notice_kind||'err');
           return;
         }
-        goStep(data.step||'welcome', data.notice||'', data.notice_kind||'info');
+        var chain=Promise.resolve();
+        if(data.assign_shell && data.assign_shell.orgId && data.assign_shell.shellName){
+          chain=assignRegShell(data.assign_shell.orgId, data.assign_shell.shellName)
+            .catch(function(err){
+              data.notice=(data.notice?data.notice+' ':'')
+                +'Shell could not be assigned automatically: '
+                +((err&&err.message)||err);
+              data.notice_kind='warn';
+            });
+        }
+        return chain.then(function(){
+          goStep(data.step||'welcome', data.notice||'', data.notice_kind||'info');
+        });
       })
       .catch(function(err){
         Array.prototype.forEach.call(btns, function(b){ b.disabled=false; });
@@ -3982,14 +4018,53 @@ SCRIPT = r"""
   });
   var search=document.getElementById('sei-reg-search');
   var sel=document.getElementById('sei-reg-select');
-  if(search && sel){
-    search.addEventListener('input', function(){
+  var hid=document.getElementById('sei-reg-id');
+  var picked=document.getElementById('sei-reg-selected');
+  if(search && sel && hid){
+    function filterRegList(){
       var q=(search.value||'').toLowerCase();
       Array.prototype.forEach.call(sel.options, function(opt, idx){
-        if(idx===0){ opt.hidden=false; return; }
+        if(idx===0){ opt.hidden=true; return; }
         var label=opt.getAttribute('data-label')||(opt.textContent||'').toLowerCase();
         opt.hidden = q && label.indexOf(q)<0;
       });
+    }
+    function expandRegList(){
+      sel.classList.remove('is-collapsed');
+      if(picked) picked.classList.remove('on');
+    }
+    function collapseRegList(opt){
+      if(!opt || !opt.value) return;
+      hid.value=opt.value;
+      search.value=opt.textContent||'';
+      sel.classList.add('is-collapsed');
+      if(picked){
+        picked.textContent='Selected: '+opt.textContent;
+        picked.classList.add('on');
+      }
+    }
+    // Hide the placeholder option from the open list.
+    if(sel.options.length) sel.options[0].hidden=true;
+    search.addEventListener('focus', function(){
+      expandRegList();
+      filterRegList();
+    });
+    search.addEventListener('click', function(){
+      expandRegList();
+      filterRegList();
+    });
+    search.addEventListener('input', function(){
+      hid.value='';
+      expandRegList();
+      filterRegList();
+    });
+    sel.addEventListener('change', function(){
+      var opt=sel.options[sel.selectedIndex];
+      collapseRegList(opt);
+    });
+    sel.addEventListener('click', function(){
+      var opt=sel.options[sel.selectedIndex];
+      if(opt && opt.value) collapseRegList(opt);
     });
   }
   var give=document.getElementById('sei-give-select');
@@ -4037,14 +4112,26 @@ try:
             notice_kind = "info"
             next_step = "welcome"
             ok = True
+            assign_shell = None
             if action == "install_files":
                 ok, msg = action_install_files()
                 notice, notice_kind = msg, ("ok" if ok else "err")
                 next_step = "registration" if ok else "files"
             elif action == "configure_registration":
-                ok, msg = action_configure_registration(request_val("template_org_id"))
+                ok, msg, new_id, needs_client_assign = action_configure_registration(
+                    request_val("template_org_id")
+                )
                 notice, notice_kind = msg, ("ok" if ok else "err")
                 next_step = "giving" if ok else "registration"
+                # Always ask the browser to pin the shell (same path as Shell Editor).
+                # Server-side RestGet often lacks the interactive user session.
+                if ok and new_id:
+                    assign_shell = {
+                        "orgId": int(new_id),
+                        "shellName": REG_TEMPLATE,
+                    }
+                    if needs_client_assign:
+                        notice = msg  # client will warn if assign fails
             elif action == "configure_giving":
                 ok, msg = action_configure_giving(request_val("giving_page_url"))
                 notice, notice_kind = msg, ("ok" if ok else "err")
@@ -4072,12 +4159,15 @@ try:
                 notice = "Unknown installer action."
                 notice_kind = "err"
                 next_step = resolve_step()
-            emit_json({
+            payload = {
                 "ok": bool(ok),
                 "step": next_step,
                 "notice": notice,
                 "notice_kind": notice_kind,
-            })
+            }
+            if assign_shell:
+                payload["assign_shell"] = assign_shell
+            emit_json(payload)
     else:
         # GET: render the wizard page.
         next_step = resolve_step()
