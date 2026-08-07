@@ -35,13 +35,13 @@ Or open the file in this repo and copy its full contents.
    - `ShellGivingTemplate`
    - `ShellRegistrationTemplate`
    - `ShellGivingWorkingCopy`
-4. Complete the **Registration** step (required). The installer creates a preview involvement named **Shell Editor Preview** by copying settings from an involvement you choose.
+4. Complete the **Registration** step (required). Choose an existing registration form involvement for the editor preview (preferably a testing form, not one published externally). You can create one in Involvement Search, return to the installer, refresh the list, and select it.
 5. Optionally configure **Giving**, **Login**, and the Admin reports menu link.
 6. When finished, open **Shell Editor** from the success page, or go to `/PyScriptForm/ShellEditor`.
 
 **Notes**
 
-- Registration preview setup is required. Giving and login modules can be skipped and installed later from the editor or installer (`?focus=giving` / `?focus=login`).
+- Registration preview setup is required (select an existing registration form involvement). Giving and login modules can be skipped and installed later from the editor or installer (`?focus=giving` / `?focus=login`).
 - HTML templates that already exist are left unchanged. The `ShellEditor` Python script is always written from the installer package.
 
 ---

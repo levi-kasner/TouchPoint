@@ -22,7 +22,10 @@ UPDATE_MANIFEST_URL = (
     "main/ShellEditor/dist/manifest.json"  
 )  
   
-INVOLVEMENT_ID = 2196959          # throwaway TEST involvement for registration preview  
+# Set by ShellEditorInstaller after creating the preview involvement (also stored in
+# setting ShellEditor-InvolvementId). 0 means not configured yet.
+INVOLVEMENT_ID = 0  
+
 
 # Giving preview page — same path used when embedding:  
 #   <iframe src="https://yourchurchname.tpsdb.com/Give/yourpageurl"></iframe>  
@@ -651,6 +654,22 @@ def apply_editor_update_from_github():
             results.append(name + ": created")  
         except Exception as e:  
             return False, "Could not create " + name + ": " + str(e)  
+    # Package default is INVOLVEMENT_ID = 0; restore the church's preview id.  
+    inv = get_model_setting(CFG_INVOLVEMENT_ID)  
+    if inv.isdigit() and int(inv) > 0:  
+        try:  
+            editor_text = model.PythonContent(SCRIPT_NAME) or ""  
+            patched, n = re.subn(  
+                r"(?m)^(INVOLVEMENT_ID\s*=\s*)\d+",  
+                r"\g<1>" + inv,  
+                editor_text,  
+                count=1,  
+            )  
+            if n and patched != editor_text:  
+                model.WriteContentPython(SCRIPT_NAME, patched)  
+                results.append("ShellEditor preview involvement: " + inv)  
+        except Exception:  
+            pass  
     msg = "Updated to v" + (remote or "?")  
     if results:  
         msg += " (" + "; ".join(results) + ")"  
@@ -786,14 +805,16 @@ def render_module_install_page():
 
 # Apply installer settings (do not hard-require them for legacy databases).  
 _inv = get_model_setting(CFG_INVOLVEMENT_ID)  
-if _inv.isdigit():  
+if _inv.isdigit() and int(_inv) > 0:  
     INVOLVEMENT_ID = int(_inv)  
-    SHELL_TARGETS["registration"]["preview"] = "/OnlineReg/" + str(INVOLVEMENT_ID)  
+SHELL_TARGETS["registration"]["preview"] = "/OnlineReg/" + str(INVOLVEMENT_ID)  
 _gurl = get_model_setting(CFG_GIVING_PAGE_URL)  
 if _gurl:  
     GIVING_PAGE_URL = _gurl  
     SHELL_TARGETS["giving"]["preview"] = giving_preview_src(GIVING_PAGE_URL)  
-SHELL_TARGETS["registration"]["installed"] = _module_flag(CFG_REGISTRATION_INSTALLED, True)  
+SHELL_TARGETS["registration"]["installed"] = (  
+    INVOLVEMENT_ID > 0 and _module_flag(CFG_REGISTRATION_INSTALLED, True)  
+)  
 SHELL_TARGETS["giving"]["installed"] = _module_flag(CFG_GIVING_INSTALLED, True)  
 SHELL_TARGETS["login"]["installed"] = _module_flag(CFG_LOGIN_INSTALLED, True)  
 
