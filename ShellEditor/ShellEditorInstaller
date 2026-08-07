@@ -3622,6 +3622,7 @@ def action_configure_menu(add_it):
 
 # ========================= UI =========================
 STYLES = """
+<style>
 .sei-wrap{max-width:860px;margin:24px auto;padding:0 16px 40px;font-family:Segoe UI,Arial,sans-serif;color:#222;}
 .sei-card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:22px 22px 18px;box-shadow:0 2px 10px rgba(0,0,0,.04);}
 .sei-h1{margin:0 0 6px;font-size:26px;}
@@ -3645,6 +3646,7 @@ STYLES = """
 .sei-check input{margin-top:3px;}
 .sei-code{font-family:Consolas,monospace;font-size:12px;background:#f5f5f5;padding:1px 5px;border-radius:4px;}
 .sei-list{margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;}
+</style>
 """
 
 def step_pills(current):
