@@ -3493,6 +3493,24 @@ def request_val(key, default=""):
         return str(model.Dictionary(key) or "").strip()
     return default
 
+def http_method():
+    try:
+        return str(model.HttpMethod or "get").lower()
+    except Exception:
+        return "get"
+
+def emit_json(payload):
+    """Return JSON for PyScriptForm AJAX POSTs (model.Form is GET-only)."""
+    body = "<!--SEI_JSON-->" + json.dumps(payload) + "<!--/SEI_JSON-->"
+    model.Header = ""
+    model.Styles = ""
+    model.Script = ""
+    model.Form = body
+    try:
+        print(body)
+    except Exception:
+        pass
+
 def resolve_step():
     focus = ""
     if model.DataHas("focus"):
@@ -3708,6 +3726,7 @@ def render_page(step, notice=None, notice_kind="info"):
     ])
 
 def render_welcome():
+    # Use GET navigation — PyScriptForm only renders model.Form on GET.
     return """
 <p>This installer will:</p>
 <ul class="sei-list">
@@ -3717,13 +3736,9 @@ def render_welcome():
   <li>Optionally configure giving and login preview modules</li>
   <li>Optionally add <span class="sei-code">Shell Editor</span> to the Admin reports menu</li>
 </ul>
-<form method="post">
-  <input type="hidden" name="step" value="welcome" />
-  <input type="hidden" name="action" value="start" />
-  <div class="sei-actions">
-    <button class="btn btn-primary" type="submit">Start installation</button>
-  </div>
-</form>
+<div class="sei-actions">
+  <a class="btn btn-primary" href="?step=files">Start installation</a>
+</div>
 """
 
 def render_files():
@@ -3740,7 +3755,7 @@ def render_files():
         "The <span class='sei-code'>" + esc(EDITOR_NAME) + "</span> script is always "
         "updated to this package version. HTML templates that already exist are left unchanged.</p>"
         "<ul class='sei-list'>" + "".join(lis) + "</ul>"
-        '<form method="post">'
+        '<form method="post" class="sei-form">'
         '<input type="hidden" name="step" value="files" />'
         '<input type="hidden" name="action" value="install_files" />'
         '<div class="sei-actions">'
@@ -3773,7 +3788,7 @@ def render_registration():
         "then point the Shell Editor registration preview at that new form.</p>"
         '<div class="sei-alert warn">Use a template involvement whose registration setup '
         "you are comfortable copying. The new form is for editor preview / testing.</div>"
-        '<form method="post" id="sei-reg-form">'
+        '<form method="post" class="sei-form" id="sei-reg-form">'
         '<input type="hidden" name="step" value="registration" />'
         '<input type="hidden" name="action" value="configure_registration" />'
         '<div class="sei-row">'
@@ -3824,7 +3839,7 @@ def render_giving():
         '<p class="sei-help">Need to configure a page first? '
         "<a href='/Giving' target='_blank' rel='noopener'>Open Online Giving setup</a> "
         "(new tab), then click the dropdown below to refresh.</p>"
-        '<form method="post" id="sei-give-form">'
+        '<form method="post" class="sei-form" id="sei-give-form">'
         '<input type="hidden" name="step" value="giving" />'
         '<div class="sei-row">'
         '<label class="sei-label" for="sei-give-select">Giving page</label>'
@@ -3851,7 +3866,7 @@ def render_login():
         '<div class="sei-alert warn">' + disclaimer + "</div>"
         + "<p>Login is optional. Skip if you do not want the editor to manage the live "
         "login shell.</p>"
-        '<form method="post">'
+        '<form method="post" class="sei-form">'
         '<input type="hidden" name="step" value="login" />'
         '<label class="sei-check">'
         '<input type="checkbox" name="login_confirm" value="1" />'
@@ -3877,7 +3892,7 @@ def render_menu():
     )
     return (
         note
-        + '<form method="post">'
+        + '<form method="post" class="sei-form">'
         '<input type="hidden" name="step" value="menu" />'
         '<label class="sei-check">'
         '<input type="checkbox" name="add_menu" value="1"'
@@ -3923,6 +3938,48 @@ def render_done():
 SCRIPT = r"""
 <script>
 (function(){
+  function parseSeiJson(txt){
+    var m=(txt||'').match(/<!--SEI_JSON-->([\s\S]*?)<!--\/SEI_JSON-->/);
+    try { return JSON.parse(m?m[1]:txt); } catch(e){ return null; }
+  }
+  function goStep(step, notice, noticeKind){
+    var url=window.location.pathname+'?step='+encodeURIComponent(step||'welcome');
+    if(notice){
+      url+='&notice='+encodeURIComponent(notice);
+      url+='&notice_kind='+encodeURIComponent(noticeKind||'info');
+    }
+    window.location=url;
+  }
+  // PyScriptForm only paints model.Form on GET. Submit actions via AJAX, then navigate.
+  document.addEventListener('submit', function(ev){
+    var form=ev.target;
+    if(!form || form.tagName!=='FORM' || !form.classList.contains('sei-form')) return;
+    ev.preventDefault();
+    var body=new FormData(form);
+    var submitter=ev.submitter;
+    if(submitter && submitter.name){
+      body.set(submitter.name, submitter.value||'');
+    }
+    var btns=form.querySelectorAll('button[type="submit"],input[type="submit"]');
+    Array.prototype.forEach.call(btns, function(b){ b.disabled=true; });
+    fetch(window.location.pathname, {method:'POST', body:body, credentials:'same-origin'})
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        var data=parseSeiJson(txt);
+        if(!data){
+          throw new Error('Unexpected installer response');
+        }
+        if(data.ok===false){
+          goStep(data.step||'welcome', data.notice||'Request failed', data.notice_kind||'err');
+          return;
+        }
+        goStep(data.step||'welcome', data.notice||'', data.notice_kind||'info');
+      })
+      .catch(function(err){
+        Array.prototype.forEach.call(btns, function(b){ b.disabled=false; });
+        alert('Installer request failed: '+((err&&err.message)||err));
+      });
+  });
   var search=document.getElementById('sei-reg-search');
   var sel=document.getElementById('sei-reg-select');
   if(search && sel){
@@ -3943,9 +4000,7 @@ SCRIPT = r"""
       fetch(window.location.pathname, {method:'POST', body:body, credentials:'same-origin'})
         .then(function(r){ return r.text(); })
         .then(function(txt){
-          var data=null;
-          var m=txt.match(/<!--SEI_JSON-->([\s\S]*?)<!--\/SEI_JSON-->/);
-          try { data=JSON.parse(m?m[1]:txt); } catch(e) {}
+          var data=parseSeiJson(txt);
           if(!data || !data.pages) return;
           var cur=give.value;
           give.innerHTML='';
@@ -3971,55 +4026,65 @@ SCRIPT = r"""
 # ========================= MAIN =========================
 try:
     action = request_val("action").lower()
-    step = request_val("step").lower()
-    notice = None
-    notice_kind = "info"
-    next_step = None
+    method = http_method()
 
-    if action == "list_giving_pages":
-        # PyScriptForm may wrap output; JS extracts the SEI_JSON marker.
-        payload = json.dumps({"pages": list_giving_pages()})
-        model.Header = ""
-        model.Styles = ""
-        model.Script = ""
-        model.Form = "<!--SEI_JSON-->" + payload + "<!--/SEI_JSON-->"
+    # POST: mutate state and return JSON (AJAX). Full-page POSTs cannot use model.Form.
+    if method == "post":
+        if action == "list_giving_pages":
+            emit_json({"pages": list_giving_pages()})
+        else:
+            notice = ""
+            notice_kind = "info"
+            next_step = "welcome"
+            ok = True
+            if action == "install_files":
+                ok, msg = action_install_files()
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "registration" if ok else "files"
+            elif action == "configure_registration":
+                ok, msg = action_configure_registration(request_val("template_org_id"))
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "giving" if ok else "registration"
+            elif action == "configure_giving":
+                ok, msg = action_configure_giving(request_val("giving_page_url"))
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "login" if ok else "giving"
+            elif action == "skip_giving":
+                ok, msg = action_skip_giving()
+                notice, notice_kind = msg, "info"
+                next_step = "login"
+            elif action == "configure_login":
+                confirmed = request_val("login_confirm") in ("1", "true", "on", "yes")
+                ok, msg = action_configure_login(confirmed)
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "menu" if ok else "login"
+            elif action == "skip_login":
+                ok, msg = action_skip_login()
+                notice, notice_kind = msg, "info"
+                next_step = "menu"
+            elif action == "configure_menu":
+                add_it = request_val("add_menu") in ("1", "true", "on", "yes")
+                ok, msg = action_configure_menu(add_it)
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "done"
+            else:
+                ok = False
+                notice = "Unknown installer action."
+                notice_kind = "err"
+                next_step = resolve_step()
+            emit_json({
+                "ok": bool(ok),
+                "step": next_step,
+                "notice": notice,
+                "notice_kind": notice_kind,
+            })
     else:
-        if action == "start":
-            next_step = "files"
-        elif action == "install_files":
-            ok, msg = action_install_files()
-            notice, notice_kind = esc(msg), ("ok" if ok else "err")
-            next_step = "registration" if ok else "files"
-        elif action == "configure_registration":
-            ok, msg = action_configure_registration(request_val("template_org_id"))
-            notice, notice_kind = esc(msg), ("ok" if ok else "err")
-            next_step = "giving" if ok else "registration"
-        elif action == "configure_giving":
-            ok, msg = action_configure_giving(request_val("giving_page_url"))
-            notice, notice_kind = esc(msg), ("ok" if ok else "err")
-            next_step = "login" if ok else "giving"
-        elif action == "skip_giving":
-            ok, msg = action_skip_giving()
-            notice, notice_kind = esc(msg), "info"
-            next_step = "login"
-        elif action == "configure_login":
-            confirmed = request_val("login_confirm") in ("1", "true", "on", "yes")
-            ok, msg = action_configure_login(confirmed)
-            notice, notice_kind = esc(msg), ("ok" if ok else "err")
-            next_step = "menu" if ok else "login"
-        elif action == "skip_login":
-            ok, msg = action_skip_login()
-            notice, notice_kind = esc(msg), "info"
-            next_step = "menu"
-        elif action == "configure_menu":
-            add_it = request_val("add_menu") in ("1", "true", "on", "yes")
-            ok, msg = action_configure_menu(add_it)
-            notice, notice_kind = esc(msg), ("ok" if ok else "err")
-            next_step = "done"
-
-        if not next_step:
-            next_step = resolve_step()
-
+        # GET: render the wizard page.
+        next_step = resolve_step()
+        notice = request_val("notice") or None
+        notice_kind = request_val("notice_kind") or "info"
+        if notice_kind not in ("info", "ok", "warn", "err"):
+            notice_kind = "info"
         model.Title = "Shell Editor Installer"
         model.Header = ""
         model.Styles = STYLES
@@ -4027,4 +4092,9 @@ try:
         model.Script = SCRIPT
 
 except Exception:
-    model.Form = "<pre style='color:red'>" + traceback.format_exc() + "</pre>"
+    err = "<pre style='color:red'>" + traceback.format_exc() + "</pre>"
+    if http_method() == "post":
+        emit_json({"ok": False, "step": "welcome", "notice": traceback.format_exc(),
+                   "notice_kind": "err"})
+    else:
+        model.Form = err
