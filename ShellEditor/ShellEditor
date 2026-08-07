@@ -5,6 +5,8 @@
 
 import re  
 import json  
+import base64  
+import zlib  
 import traceback  
 
 # ========================= CONFIG =========================  
@@ -549,6 +551,110 @@ def check_editor_update():
     if parse_version_tuple(remote) > parse_version_tuple(EDITOR_VERSION):  
         return data  
     return None  
+
+def parse_installer_payloads(installer_text):  
+    """Parse PAYLOADS from a ShellEditorInstaller script body."""  
+    begin = "# ==== BEGIN EMBEDDED PAYLOADS (generated; do not edit) ===="  
+    end = "# ==== END EMBEDDED PAYLOADS ===="  
+    text = installer_text or ""  
+    i = text.find(begin)  
+    j = text.find(end)  
+    if i < 0 or j < 0 or j <= i:  
+        raise ValueError("Installer payloads not found")  
+    block = text[i + len(begin):j]  
+    payloads = {}  
+    for m in re.finditer(  
+        r"'([A-Za-z][A-Za-z0-9_]*)'\s*:\s*\{\s*"  
+        r"'kind'\s*:\s*'([^']+)'\s*,\s*"  
+        r"'data'\s*:\s*\((.*?)\)\s*,?\s*\}",  
+        block,  
+        re.S,  
+    ):  
+        name, kind, data_part = m.group(1), m.group(2), m.group(3)  
+        chunks = re.findall(r"'([^']*)'", data_part)  
+        payloads[name] = {"kind": kind, "data": "".join(chunks)}  
+    if "ShellEditor" not in payloads:  
+        raise ValueError("Installer is missing the ShellEditor payload")  
+    return payloads  
+
+def decode_package_payload(entry):  
+    raw = (entry or {}).get("data") or ""  
+    return zlib.decompress(base64.b64decode(raw.encode("ascii")))  
+
+def python_content_exists(name):  
+    try:  
+        return bool(model.PythonContent(name))  
+    except Exception:  
+        return False  
+
+def apply_editor_update_from_github():  
+    """Fetch latest installer from GitHub and apply the embedded ShellEditor package.
+
+    Always refreshes ShellEditor + ShellEditorInstaller. Creates missing HTML
+    templates only (never overwrites existing HTML Special Content).
+    """  
+    manifest = fetch_update_manifest()  
+    if not manifest:  
+        return False, "Could not download the update manifest."  
+    remote = str(manifest.get("editorVersion") or "").strip()  
+    if remote and parse_version_tuple(remote) <= parse_version_tuple(EDITOR_VERSION):  
+        return False, "Already on the latest version (v" + EDITOR_VERSION + ")."  
+    installer_url = str(manifest.get("installerScript") or "").strip()  
+    if not installer_url:  
+        return False, "Update manifest is missing installerScript."  
+    try:  
+        installer_text = model.RestGet(installer_url, {})  
+    except Exception as e:  
+        return False, "Could not download installer: " + str(e)  
+    if not installer_text or "PAYLOADS" not in installer_text:  
+        return False, "Downloaded installer looks invalid."  
+    try:  
+        payloads = parse_installer_payloads(installer_text)  
+    except Exception as e:  
+        return False, "Could not read installer package: " + str(e)  
+
+    # Keep the Special Content installer in sync for optional module setup.  
+    try:  
+        model.WriteContentPython(INSTALLER_SCRIPT, installer_text)  
+    except Exception as e:  
+        return False, "Could not update ShellEditorInstaller: " + str(e)  
+
+    kind_map = {  
+        "ShellLoginTemplate": "login",  
+        "ShellGivingTemplate": "giving",  
+        "ShellRegistrationTemplate": "registration",  
+        "ShellGivingWorkingCopy": "giving",  
+    }  
+    results = []  
+    for name, entry in payloads.items():  
+        kind = entry.get("kind") or "html"  
+        try:  
+            data = decode_package_payload(entry)  
+            text = data.decode("utf-8")  
+        except Exception as e:  
+            return False, "Could not decode " + name + ": " + str(e)  
+        if kind == "python" or name == SCRIPT_NAME:  
+            try:  
+                existed = python_content_exists(name)  
+                model.WriteContentPython(name, text)  
+                results.append(name + (": updated" if existed else ": created"))  
+            except Exception as e:  
+                return False, "Could not write " + name + ": " + str(e)  
+            continue  
+        # HTML templates / working copy: create only when missing.  
+        if content_exists(name) or python_content_exists(name):  
+            results.append(name + ": skipped")  
+            continue  
+        shell_kind = kind_map.get(name, "registration")  
+        try:  
+            write_shell_file(name, text, shell_kind)  
+            results.append(name + ": created")  
+        except Exception as e:  
+            return False, "Could not create " + name + ": " + str(e)  
+    msg = "Updated to v" + (remote or "?")  
+    if results:  
+        msg += " (" + "; ".join(results) + ")"  
+    return True, msg  
   
 def update_banner_html(manifest):  
     """Dismissible notice when a newer editor package is available."""  
@@ -556,23 +662,27 @@ def update_banner_html(manifest):
         return ""  
     remote = esc(str(manifest.get("editorVersion") or "").strip())  
     notes = esc(str(manifest.get("releaseNotes") or "").strip())  
-    href = str(manifest.get("releaseUrl") or manifest.get("installerScript") or "").strip()  
-    link = ""  
+    href = str(manifest.get("releaseUrl") or "").strip()  
+    notes_html = (" — " + notes) if notes else ""  
+    release_link = ""  
     if href:  
-        link = (  
+        release_link = (  
             ' <a href="' + esc(href) + '" target="_blank" rel="noopener">'  
-            "Open release</a>"  
+            "Release notes</a>"  
         )  
-    detail = (" — " + notes) if notes else ""  
     sess_key = "ShellEdit.updateDismissed." + EDITOR_VERSION  
     return (  
         '<div class="she-update" id="she-update-banner" role="status">'  
         '<button type="button" class="she-update-close" onclick="sheDismissUpdate()" '  
         'aria-label="Dismiss">&times;</button>'  
         "<strong>Update available</strong> (v" + remote + "; you have v"  
-        + esc(EDITOR_VERSION) + ")" + detail + "." + link  
-        + '<div class="she-update-help">Re-upload/run the latest installer to update the '
-        "editor. Custom shells migrate automatically when opened.</div>"  
+        + esc(EDITOR_VERSION) + ")" + notes_html + "." + release_link  
+        + '<div class="she-update-actions">'  
+        '<button type="button" class="btn btn-primary btn-sm" id="she-update-btn" '  
+        'onclick="sheApplyUpdate()">Update now</button>'  
+        "</div>"  
+        '<div class="she-update-help">Downloads the latest package and updates the '
+        "editor automatically. Custom shells migrate when opened.</div>"  
         "</div>"  
         "<script>(function(){try{if(sessionStorage.getItem("  
         + json.dumps(sess_key)  
@@ -3252,7 +3362,8 @@ EDITOR_STYLES = """
 .she-update{margin:0 14px 10px;padding:10px 34px 10px 12px;background:#eef6ff;border:1px solid #b5d0f0;border-radius:6px;color:#1e3a5f;font-size:12px;line-height:1.45;position:relative;flex:0 0 auto;}  
 .she-update a{color:#0b4f8a;font-weight:600;}  
 .she-update-close{position:absolute;top:2px;right:6px;width:28px;height:28px;border:0;background:transparent;color:#3a5f86;font-size:20px;line-height:1;cursor:pointer;padding:0;}  
-.she-update-help{margin-top:4px;color:#4a6480;}  
+.she-update-actions{margin-top:8px;}  
+.she-update-help{margin-top:6px;color:#4a6480;}  
 /* Head stays pinned above the scrolling settings body. */  
 .she-controls-head{display:flex;align-items:center;gap:8px;flex:0 0 auto;z-index:5;background:#fff;margin:0;padding:12px 14px 10px;border-bottom:1px solid #eee;}  
 .she-controls-head h3{margin:0;flex:1 1 auto;font-size:18px;}  
@@ -3513,6 +3624,11 @@ try:
             hide_alert_for(alert_kind)  
         model.Form = "OK"  
 
+    elif shell_action == "apply_update":  
+        # ---------------- POST: apply published editor update from GitHub ----------------  
+        ok, msg = apply_editor_update_from_github()  
+        model.Form = ("OK:" + msg) if ok else ("ERROR: " + msg)  
+
     elif shell_action in ("save", "save_as"):  
         # ---------------- POST: save / save-as shell content ----------------  
         requested = ""  
@@ -3721,6 +3837,33 @@ try:
       var box=$('she-update-banner');  
       if(box) box.style.display='none';  
       try{ sessionStorage.setItem('ShellEdit.updateDismissed.'+@@EDITORVERJSON@@,'1'); }catch(e){}  
+    }  
+    function sheApplyUpdate(){  
+      var btn=$('she-update-btn');  
+      if(btn){  
+        if(btn.disabled) return;  
+        btn.disabled=true;  
+        btn.textContent='Updating…';  
+      }  
+      status('Updating editor…');  
+      var body=new FormData();  
+      body.append('shell_action','apply_update');  
+      body.append('shell_kind',SHELL_KIND);  
+      fetch('/PyScriptForm/'+SCRIPT_NAME,{method:'POST',body:body,credentials:'same-origin'})  
+        .then(function(r){return r.text();})  
+        .then(function(txt){  
+          var err=shePostError(txt);  
+          if(err) throw new Error(err);  
+          status('Update complete. Reloading…');  
+          window.location.reload();  
+        })  
+        .catch(function(e){  
+          status('Update failed: '+((e&&e.message)||e));  
+          if(btn){  
+            btn.disabled=false;  
+            btn.textContent='Update now';  
+          }  
+        });  
     }  
     function sheDismissAlert(){  
       var box=$('she-live-alert');  
