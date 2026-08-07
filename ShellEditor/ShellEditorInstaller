@@ -3794,8 +3794,8 @@ def render_registration():
         'aria-label="Registration involvements">'
         + "".join(opts) + "</select>"
         '<p class="sei-help">' + str(len(rows))
-        + " active registration form involvement(s) found "
-        "(RegistrationTypeId = 26, currently open). Click one to select it.</p>"
+        + " open registration form involvement(s) found. "
+        "Click one to select it.</p>"
         "</div>"
         '<div class="sei-actions">'
         '<button class="btn btn-primary" type="submit">Create preview involvement</button>'

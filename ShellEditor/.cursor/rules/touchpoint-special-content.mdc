@@ -22,3 +22,8 @@ These Python scripts run as TouchPoint Special Content / PyScriptForm code.
 - `model.Form`, `model.Styles`, and `model.Script` are for **GET** page loads.
 - Full-page form POSTs will not paint `model.Form` (blank page). Use GET navigation and/or AJAX POST that returns JSON/`print` output, then navigate with GET.
 - Wrap CSS in `<style>` tags when assigning `model.Styles`.
+
+## User-facing copy
+
+- Installer help text, notices, and labels should stay user-facing. Do **not** expose database column names, type IDs, SQL filters, setting key names, or other storage internals (e.g. `RegistrationTypeId = 26`).
+- Exception: Shell Editor field/selector help may mention CSS selectors and similar coding details, because that helps people who edit shells manually.
