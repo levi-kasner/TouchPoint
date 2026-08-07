@@ -1,0 +1,321 @@
+<!-- SHELL-EDITOR-KIND:login
+     =====================================================================
+     DO NOT REMOVE OR EDIT THIS COMMENT.
+     The Shell Editor identifies this Special Content as a Login shell
+     using this marker at the top of the file.
+     Content Keyword must be exactly: Shell
+     (TouchPoint cannot store multiple keywords via WriteContentHtml).
+     Removing or changing this marker hides the shell from the editor dropdown.
+     =====================================================================
+-->
+<!-- SHELL-EDITOR-SHELL-VERSION:1 -->
+<html>
+<head>
+	<title>Sign In</title>
+	<!-- ================= BROWSER TAB / MOBILE SETTINGS ================= --><!-- Controls zooming on phones/tablets. Leave as-is. --><meta content="width=device-width, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport" /><!-- ⚠️ DO NOT REMOVE: TouchPoint inserts the login form's built-in styling here. --><!--FORM CSS-->
+</head>
+<body><!-- ==== SHELL-EDITOR BACKGROUND MEDIA SCRIPT ==== --><script>
+(function(){
+  function wrapOf(node){
+    if(!node) return null;
+    if(node.classList&&node.classList.contains('she-bg-media')) return node;
+    return node.parentNode&&node.parentNode.classList&&
+      node.parentNode.classList.contains('she-bg-media') ? node.parentNode : null;
+  }
+  window.__sheBgMediaReveal=function(node){
+    var el=wrapOf(node);
+    if(!el||el.getAttribute('data-she-fading')) return;
+    el.setAttribute('data-she-fading','1');
+    // Wait a beat so the first decoded frame can paint inside the embed.
+    setTimeout(function(){
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          el.classList.add('she-bg-media-ready');
+          try{ el.style.removeProperty('opacity'); }catch(e){ el.style.opacity=''; }
+        });
+      });
+    }, 250);
+  };
+  function vimeoPost(frame, payload){
+    try{ frame.contentWindow.postMessage(JSON.stringify(payload), '*'); }catch(e){}
+  }
+  function youtubeListen(frame){
+    try{
+      var w=frame.contentWindow;
+      w.postMessage(JSON.stringify({event:'listening', id:'she-bg'}), '*');
+      w.postMessage('{"event":"command","func":"addEventListener","args":["onStateChange"]}', '*');
+    }catch(e){}
+  }
+  // Called from iframe onload — only wires APIs; does NOT fade in yet.
+  window.__sheBgMediaEmbedLoad=function(frame){
+    var el=wrapOf(frame);
+    if(!el||!frame) return;
+    var kind=(el.getAttribute('data-she-bg-kind')||'').toLowerCase();
+    if(kind==='youtube'){
+      youtubeListen(frame);
+      setTimeout(function(){ youtubeListen(frame); }, 400);
+      setTimeout(function(){ youtubeListen(frame); }, 1200);
+    } else if(kind==='vimeo'){
+      vimeoPost(frame, {method:'addEventListener', value:'play'});
+      vimeoPost(frame, {method:'addEventListener', value:'playing'});
+      vimeoPost(frame, {method:'addEventListener', value:'timeupdate'});
+      vimeoPost(frame, {method:'getCurrentTime'});
+    }
+  };
+  window.addEventListener('message', function(ev){
+    var origin=(ev.origin||'').toLowerCase();
+    var data=ev.data;
+    if(typeof data==='string'){
+      try{ data=JSON.parse(data); }catch(e){ return; }
+    }
+    if(!data||typeof data!=='object') return;
+    var el=document.querySelector('.she-bg-media');
+    if(!el) return;
+    var frame=el.querySelector('.she-bg-media-frame');
+    if(!frame) return;
+    var kind=(el.getAttribute('data-she-bg-kind')||'').toLowerCase();
+    if(kind==='vimeo' && origin.indexOf('vimeo.com')>=0){
+      if(data.event==='ready'){
+        vimeoPost(frame, {method:'addEventListener', value:'play'});
+        vimeoPost(frame, {method:'addEventListener', value:'playing'});
+        vimeoPost(frame, {method:'addEventListener', value:'timeupdate'});
+        vimeoPost(frame, {method:'getCurrentTime'});
+      }
+      if(data.event==='play' || data.event==='playing'){
+        window.__sheBgMediaReveal(frame); return;
+      }
+      if(data.event==='timeupdate' && data.data && data.data.seconds>0.05){
+        window.__sheBgMediaReveal(frame); return;
+      }
+      if(data.method==='getCurrentTime' && typeof data.value==='number' && data.value>0.05){
+        window.__sheBgMediaReveal(frame); return;
+      }
+    }
+    if(kind==='youtube' && (origin.indexOf('youtube.com')>=0 || origin.indexOf('youtube-nocookie.com')>=0)){
+      // 1 = playing
+      if(data.event==='onStateChange' && data.info===1){
+        window.__sheBgMediaReveal(frame); return;
+      }
+      if(data.event==='infoDelivery' && data.info && data.info.playerState===1){
+        window.__sheBgMediaReveal(frame); return;
+      }
+      if(data.event==='onReady' || data.event==='initialDelivery'){
+        youtubeListen(frame);
+      }
+    }
+  });
+  var el=document.querySelector('.she-bg-media');
+  if(!el) return;
+  var src=(el.getAttribute('data-she-bg-src')||'').trim();
+  if(!src || el.hasAttribute('hidden')) return;
+  var frame=el.querySelector('.she-bg-media-frame');
+  if(!frame) return;
+  var kind=(el.getAttribute('data-she-bg-kind')||'').toLowerCase();
+  if(frame.tagName==='VIDEO' || kind==='file'){
+    if(!frame.paused && frame.readyState>=2) window.__sheBgMediaReveal(frame);
+    frame.addEventListener('playing', function(){ window.__sheBgMediaReveal(frame); }, {once:true});
+    setTimeout(function(){ window.__sheBgMediaReveal(frame); }, 8000);
+    return;
+  }
+  // Embeds: never fade on iframe load — wait for play messages above.
+  if(frame.tagName==='IFRAME'){
+    window.__sheBgMediaEmbedLoad(frame);
+    frame.addEventListener('load', function(){ window.__sheBgMediaEmbedLoad(frame); }, {once:true});
+  }
+  // Last-resort fallback if the host blocks postMessage events.
+  setTimeout(function(){ window.__sheBgMediaReveal(frame); }, 10000);
+})();
+</script>
+<div aria-hidden="true" class="she-bg-media" data-she-bg-kind="file" data-she-bg-src="https://thex.church/wp-content/uploads/2025/09/Website-Loop.mp4" style="opacity:0 !important">
+<video autoplay="" class="she-bg-media-frame" loop="" muted="" onplaying="window.__sheBgMediaReveal&amp;&amp;window.__sheBgMediaReveal(this)" playsinline="" preload="auto" src="https://thex.church/wp-content/uploads/2025/09/Website-Loop.mp4">&nbsp;</video>
+</div>
+
+<div class="container"><!-- ============================================================= --><!--  THE LOGIN BOX                                              --><!--  Header logo sits above the FORM markers inside this box.    --><!--  Form look inherits TouchPoint defaults from the FORM CSS marker; customize in Shell Editor. --><!--  ⚠️ DO NOT REMOVE the FORM START / FORM END markers.         --><!-- ============================================================= -->
+<div class="form-box"><!-- ============================================================= --><!--  HEADER LOGO (top of login box)                              --><!--  Editable in the editor's Header Logo section.               --><!-- ============================================================= --><img alt="" class="header-logo" src="https://img1.tpsdb.com/public/levi/media/citydemo-whitetransparent20260804170541765.png" /> <!--FORM START--><!--FORM END--> <!-- ============================================================= --> <!--  FOOTER (inside form box so wrapper fill/border/radius apply) --> <!-- ============================================================= -->
+<div class="text-center">
+<p class="footer-box"><img alt="" class="footer-logo" src="data:image/png;base64,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" /> <span class="footer-church">City Church</span>. All rights reserved. | <a class="footer-link" href="https://touchpointsoftware.com">citychurch.com</a>&nbsp;</p>
+</div>
+</div>
+</div>
+<style type="text/css">/* ============================ FONTS ============================ */  
+	@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');  
+  
+	/* ======================== BACKGROUND =========================== */  
+	body {  
+		
+		background-image: url('https://img1.tpsdb.com/public/levi/media/citydemo-background_graphic20260804171559348.png') !important;  
+		background-attachment: fixed !important;  
+		background-position: center !important;  
+		background-size: cover !important;  
+		line-height: 1.5 !important;  
+		font-style: normal !important;  
+		font-family: 'Montserrat', sans-serif !important;  
+		font-weight: normal !important;  
+		color: #333333 !important;  
+	}  
+  
+	/* ======================= HEADER LOGO =========================== */  
+	/* Sits at the top of .form-box (login shell).  
+	   Editor Header Logo section (size + spacing).  
+	   - width / max-width = size caps (relative to the login box)  
+	   - --she-justify + margin-left/right = left / center / right align  
+	   - --she-gutter-l/r = min side gaps (from spacing L/R margin) */  
+	.header-logo {  
+		display: block !important;  
+		width: 80% !important;  
+		--she-max-w: 500px !important;  
+		max-width: 500px !important;  
+		--she-justify: center !important;  
+		--she-gutter-l: 0px !important;  
+		--she-gutter-r: 0px !important;  
+		margin-left: auto !important;  
+		margin-right: auto !important;  
+		padding: 0 0 20px 0 !important;  
+	}
+
+/* FOOTER LOGO — hidden until it has an image link. */  
+	.footer-logo {  
+		display: block !important;  
+		width: 50% !important;  
+		
+		
+		--she-justify: center !important;  
+		--she-gutter-l: 0px !important;  
+		--she-gutter-r: 0px !important;  
+		margin-left: auto !important;  
+		margin-right: auto !important;
+    max-width: 200px !important;
+    --she-max-w: 200px !important;
+    margin-bottom: 15px !important;
+}  
+	.footer-logo[src=""] { display: none !important; }
+
+	/* ======================== FORM BOX ============================= */
+	/* Footer lives inside .form-box — fill / border / radius are on the wrapper only. */
+	.form-box {
+		background-color: rgba(0, 0, 0, 0.6) !important;
+		color: #ffffff !important;
+		
+		
+		box-shadow: 1px 1px 2px rgba(0,0,0,.15) !important;
+		margin-bottom: 0px !important;
+    --she-gutter-l: 0px !important;
+    --she-gutter-r: 0px !important;
+    --she-justify: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    
+    
+    
+    
+    border-bottom-right-radius: 10px !important;
+    border-bottom-left-radius: 10px !important;
+    border-top-right-radius: 10px !important;
+    border-top-left-radius: 10px !important;
+    
+    padding-top: 25px !important;
+    
+    padding-bottom: 25px !important;
+    
+    width: 100% !important;
+    
+    max-width: 500px !important;
+    --she-max-w: 500px !important;
+    
+    margin-top: 75px !important;
+    border-radius: 10px !important;
+}
+	.footer-box {
+		background-color: transparent !important;
+		border: none !important;
+		margin: 0 !important;
+	}
+	.footer-box .footer-link {
+		color: #4294ff !important;
+    font-style: normal !important;
+}
+
+	/* Injected login panel — always clear so the form box fill shows through.
+	   Not exposed in the Shell Editor. */
+	.account .panel {
+		background-color: transparent !important;
+		border: none !important;
+		box-shadow: none !important;
+	}
+
+	/* =================== FORM / SIGN-IN ======================== */
+	/* Colors / fonts inherit from the FORM CSS marker until edited in Shell Editor. */
+
+	.account .form-control.input-lg {
+    font-style: normal !important;
+}
+
+	.account .signin-password .forgot {
+    font-style: normal !important;
+}
+
+	.account .btn.btn-primary.btn-block.btn-lg {
+    font-style: normal !important;
+}
+
+	.account .btn-primary.btn-lg {
+    font-style: normal !important;
+}
+
+	.account .signin-with .header {
+    font-style: normal !important;
+}
+
+	.account .signin-with .header a {
+    font-style: normal !important;
+    color: #4294ff !important;
+}
+
+	.account .alert-danger {
+    font-style: normal !important;
+}
+
+	/* ==== SHELL-EDITOR BACKGROUND VIDEO ==== */
+	/* Layers: body background-color, then background-image, then video. */
+	.she-bg-media {
+		position: fixed !important;
+		top: 0 !important;
+		left: 0 !important;
+		width: 100% !important;
+		height: 100% !important;
+		overflow: hidden !important;
+		z-index: 0 !important;
+		pointer-events: none !important;
+		transition: opacity .9s ease !important;
+	}
+	.she-bg-media:not(.she-bg-media-ready) {
+		opacity: 0 !important;
+	}
+	.she-bg-media.she-bg-media-ready {
+		opacity: 1 !important;
+	}
+	.she-bg-media[hidden],
+	.she-bg-media:not([data-she-bg-src]),
+	.she-bg-media[data-she-bg-src=""] {
+		display: none !important;
+	}
+	.she-bg-media .she-bg-media-frame {
+		position: absolute !important;
+		top: 50% !important;
+		left: 50% !important;
+		width: 100vw !important;
+		height: 56.25vw !important;
+		min-height: 100vh !important;
+		min-width: 177.78vh !important;
+		transform: translate(-50%, -50%) !important;
+		border: 0 !important;
+		object-fit: cover !important;
+	}
+	body:has(.she-bg-media[data-she-bg-src]:not([data-she-bg-src=""])) .header-logo,
+	body:has(.she-bg-media[data-she-bg-src]:not([data-she-bg-src=""])) .container {
+		position: relative !important;
+		z-index: 1 !important;
+	}
+</style>
+</body>
+</html>

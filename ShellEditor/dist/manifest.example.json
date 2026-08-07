@@ -1,0 +1,9 @@
+{
+  "editorVersion": "1.0.1",
+  "shellFormatVersion": 1,
+  "minShellFormatVersion": 1,
+  "releaseUrl": "https://github.com/levi-kasner/TouchPoint/releases/tag/shell-editor-v1.0.1",
+  "installerScript": "https://raw.githubusercontent.com/levi-kasner/TouchPoint/main/ShellEditor/ShellEditorInstaller",
+  "releaseNotes": "Bug fixes and editor improvements.",
+  "publishedAt": "2026-08-07T00:00:00Z"
+}
