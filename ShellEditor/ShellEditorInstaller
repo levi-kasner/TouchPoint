@@ -4044,18 +4044,24 @@ def action_configure_menu(add_it, column_choice="", header_choice="", new_header
 def action_uninstall(remove_templates):
     """Clear menu/settings; return Special Content targets for browser delete.
 
-    Returns (ok, msg, delete_targets). Special Content is deleted in the browser
-    with the same session credentials the editor uses for /api/v1 calls.
+    Returns (ok, msg, meta) where meta includes:
+      delete_targets — files for the browser to DELETE via /api/v1
+      unassign_reg — optional {orgId, shellName} to clear before template delete
     """
     if not is_developer():
-        return False, "Uninstall requires the Developer role.", []
+        return False, "Uninstall requires the Developer role.", {}
+    # Capture before clearing settings — needed to unassign the live reg shell.
+    inv = get_setting(CFG_INVOLVEMENT_ID)
+    unassign_reg = None
+    if remove_templates and inv.isdigit() and int(inv) > 0:
+        unassign_reg = {"orgId": int(inv), "shellName": REG_TEMPLATE}
     # 1) Admin reports menu
     try:
         ok_menu, menu_msg = remove_editor_from_admin_menu()
         if not ok_menu:
-            return False, menu_msg, []
+            return False, menu_msg, {}
     except Exception as e:
-        return False, "Could not update the Admin reports menu: " + str(e), []
+        return False, "Could not update the Admin reports menu: " + str(e), {}
     # 2) Settings + people ExtraValues (ShellEdit%)
     clear_shell_editor_settings()
     try:
@@ -4066,7 +4072,13 @@ def action_uninstall(remove_templates):
     msg = "Shell Editor settings and menu link removed."
     if not remove_templates:
         msg += " Template files will be left in place."
-    return True, msg, targets
+    meta = {"delete_targets": targets}
+    if unassign_reg:
+        meta["unassign_reg"] = unassign_reg
+    if remove_templates:
+        # Client clears this shell on open reg forms before delete (avoids HTTP 400).
+        meta["clear_reg_shell_name"] = REG_TEMPLATE
+    return True, msg, meta
 
 # ========================= UI =========================
 STYLES = """
@@ -4667,16 +4679,20 @@ SCRIPT = r"""
     if(Array.isArray(payload.data)) return payload.data;
     return [];
   }
-  function typeCandidates(typ){
+  function typeCandidates(typ, typeId){
     var t=String(typ==null?'':typ).trim();
     var out=[];
-    function add(v){ if(v!=='' && out.indexOf(v)<0) out.push(String(v)); }
+    function add(v){ if(v!=='' && out.indexOf(String(v))<0) out.push(String(v)); }
+    // Prefer API enum names; numeric TypeID often yields HTTP 400.
     add(t);
     var low=t.toLowerCase();
-    if(low==='html' || low==='0'){ add('Html'); add('HTML'); add('0'); }
+    if(low==='html' || low==='0'){ add('Html'); add('HTML'); }
     if(low==='pythonscript' || low==='python' || low==='3'){
-      add('PythonScript'); add('python'); add('3');
+      add('PythonScript');
     }
+    if(typeId!=null && String(typeId)!=='') add(typeId);
+    if(low==='html') add('0');
+    if(low==='pythonscript' || low==='python') add('3');
     return out;
   }
   function findSpecialContentFile(files, name, typ){
@@ -4695,85 +4711,87 @@ SCRIPT = r"""
     }
     return matches[0];
   }
+  function unassignRegShell(orgId, shellName){
+    if(!orgId || !shellName) return Promise.resolve();
+    var settingsUrl='/api/v1/Involvements/'+encodeURIComponent(orgId)+'/Registrations/Settings';
+    return fetch(settingsUrl,{method:'GET',credentials:'same-origin',headers:{'Accept':'application/json'}})
+      .then(function(r){
+        if(!r.ok) throw new Error('Could not load registration settings ('+r.status+')');
+        return r.json();
+      })
+      .then(function(settings){
+        settings=settings||{};
+        var cur=String(settings.regShellId||'').trim();
+        if(!cur || cur.toLowerCase()!==String(shellName).toLowerCase()) return;
+        settings.regShellId='';
+        return fetch(settingsUrl,{
+          method:'POST',
+          credentials:'same-origin',
+          headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify(settings)
+        }).then(function(r){
+          if(!r.ok) throw new Error('Could not clear registration shell ('+r.status+')');
+        });
+      });
+  }
   function deleteSpecialContentTargets(targets){
     // Same session auth the editor uses for /api/v1 calls.
-    var listPromise=null;
-    function listFiles(){
-      if(listPromise) return listPromise;
-      listPromise=fetch('/api/v1/SpecialContentFiles',{
-        method:'GET',
-        credentials:'same-origin',
-        headers:{'Accept':'application/json'}
-      }).then(function(r){
-        if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
-        return r.json();
-      }).then(asSpecialContentList);
-      return listPromise;
-    }
-    function deleteById(name, id, typ){
-      var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
-        +'?type='+encodeURIComponent(typ);
-      return fetch(url,{
-        method:'DELETE',
-        credentials:'same-origin',
-        headers:{'Accept':'application/json'}
-      }).then(function(r){
-        if(!r.ok) throw new Error('Could not delete '+name+' ('+r.status+')');
-        return String(name)+': deleted';
-      });
-    }
-    function deleteOne(t){
-      var name=String(t.name||'');
-      var typ=String(t.type||'Html');
-      var id=t.id!=null?t.id:null;
-      var attempt=function(typeValue){
-        return deleteById(name, id, typeValue);
-      };
-      var runWithId=function(){
-        var cands=[];
-        if(t.typeId!=null && String(t.typeId)!=='') cands.push(String(t.typeId));
-        typeCandidates(typ).forEach(function(c){
-          if(cands.indexOf(c)<0) cands.push(c);
-        });
-        var p=Promise.reject(new Error('no type'));
-        cands.forEach(function(c){
-          p=p.catch(function(){ return attempt(c); });
-        });
-        return p;
-      };
-      if(id!=null && String(id)!==''){
-        return runWithId().catch(function(err){
-          // Id may be stale; fall back to list lookup by name.
-          return listFiles().then(function(files){
-            var f=findSpecialContentFile(files, name, typ);
-            if(!f) throw err;
-            id=f.Id!=null?f.Id:f.id;
-            var apiType=f.Type!=null?f.Type:(f.type!=null?f.type:typ);
-            typ=String(apiType);
-            return runWithId();
+    // Resolve Id/Type from SpecialContentFiles (authoritative), then DELETE.
+    return fetch('/api/v1/SpecialContentFiles',{
+      method:'GET',
+      credentials:'same-origin',
+      headers:{'Accept':'application/json'}
+    }).then(function(r){
+      if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
+      return r.json();
+    }).then(function(payload){
+      var files=asSpecialContentList(payload);
+      var chain=Promise.resolve();
+      var results=[];
+      (targets||[]).forEach(function(t){
+        chain=chain.then(function(){
+          var name=String(t.name||'');
+          var f=findSpecialContentFile(files, name, t.type);
+          var id=f?(f.Id!=null?f.Id:f.id):t.id;
+          var apiType=f?(f.Type!=null?f.Type:(f.type!=null?f.type:t.type)):t.type;
+          if(id==null || String(id)===''){
+            if(t.required) throw new Error(name+' not found in Special Content');
+            results.push(name+': not found');
+            return;
+          }
+          var cands=typeCandidates(apiType, t.typeId);
+          // Ensure declared type is tried even if API Type is odd.
+          typeCandidates(t.type, t.typeId).forEach(function(c){
+            if(cands.indexOf(c)<0) cands.push(c);
           });
+          var attempt=function(typ){
+            var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
+              +'?type='+encodeURIComponent(typ);
+            return fetch(url,{
+              method:'DELETE',
+              credentials:'same-origin',
+              headers:{'Accept':'application/json'}
+            }).then(function(r){
+              if(r.ok) return name+': deleted';
+              return r.text().then(function(body){
+                var detail=(body||'').replace(/\s+/g,' ').trim();
+                if(detail.length>180) detail=detail.slice(0,180)+'…';
+                throw new Error(
+                  'Could not delete '+name+' ('+r.status
+                  +(detail?': '+detail:'')+'; type='+typ+')'
+                );
+              });
+            });
+          };
+          var p=Promise.reject(new Error('no type'));
+          cands.forEach(function(c){
+            p=p.catch(function(){ return attempt(c); });
+          });
+          return p.then(function(line){ results.push(line); });
         });
-      }
-      return listFiles().then(function(files){
-        var f=findSpecialContentFile(files, name, typ);
-        if(!f){
-          if(t.required) throw new Error(name+' not found in Special Content');
-          return name+': not found';
-        }
-        id=f.Id!=null?f.Id:f.id;
-        var apiType=f.Type!=null?f.Type:(f.type!=null?f.type:typ);
-        typ=String(apiType);
-        return runWithId();
       });
-    }
-    var chain=Promise.resolve();
-    var results=[];
-    (targets||[]).forEach(function(t){
-      chain=chain.then(function(){
-        return deleteOne(t).then(function(line){ results.push(line); });
-      });
+      return chain.then(function(){ return results; });
     });
-    return chain.then(function(){ return results; });
   }
   // PyScriptForm only paints model.Form on GET. Submit actions via AJAX, then navigate.
   document.addEventListener('submit', function(ev){
@@ -4842,6 +4860,37 @@ SCRIPT = r"""
                 +((err&&err.message)||err);
               data.notice_kind='warn';
             });
+        }
+        // Templates still assigned to a live form often return HTTP 400 on delete.
+        if(data.unassign_reg && data.unassign_reg.orgId && data.unassign_reg.shellName){
+          chain=chain.then(function(){
+            return unassignRegShell(data.unassign_reg.orgId, data.unassign_reg.shellName);
+          }).catch(function(err){
+            data.notice=(data.notice?data.notice+' ':'')
+              +'Could not clear registration shell before delete: '
+              +((err&&err.message)||err);
+            data.notice_kind='warn';
+          });
+        }
+        if(data.clear_reg_shell_name){
+          chain=chain.then(function(){
+            var body=new FormData();
+            body.append('action','list_reg_involvements');
+            return fetch(window.location.pathname,{method:'POST',body:body,credentials:'same-origin'})
+              .then(function(r){ return r.text(); })
+              .then(function(txt){
+                var listed=parseSeiJson(txt);
+                var rows=(listed&&listed.involvements)||[];
+                var seq=Promise.resolve();
+                rows.forEach(function(row){
+                  seq=seq.then(function(){
+                    return unassignRegShell(row.id, data.clear_reg_shell_name)
+                      .catch(function(){ /* skip involvements we cannot update */ });
+                  });
+                });
+                return seq;
+              });
+          });
         }
         if(data.delete_targets && data.delete_targets.length){
           chain=chain.then(function(){
@@ -5057,6 +5106,8 @@ try:
             ok = True
             assign_shell = None
             delete_targets = None
+            unassign_reg = None
+            clear_reg_shell_name = None
             finish_after_delete = False
             if action == "install_files":
                 ok, msg = action_install_files()
@@ -5107,7 +5158,11 @@ try:
                 remove_templates = request_val("remove_templates") in (
                     "1", "true", "on", "yes"
                 )
-                ok, msg, delete_targets = action_uninstall(remove_templates)
+                ok, msg, meta = action_uninstall(remove_templates)
+                meta = meta or {}
+                delete_targets = meta.get("delete_targets")
+                unassign_reg = meta.get("unassign_reg")
+                clear_reg_shell_name = meta.get("clear_reg_shell_name")
                 notice, notice_kind = msg, ("ok" if ok else "err")
                 next_step = "uninstall_installer" if ok else "uninstall"
             elif action == "uninstall_installer":
@@ -5138,6 +5193,10 @@ try:
             }
             if assign_shell:
                 payload["assign_shell"] = assign_shell
+            if unassign_reg:
+                payload["unassign_reg"] = unassign_reg
+            if clear_reg_shell_name:
+                payload["clear_reg_shell_name"] = clear_reg_shell_name
             if delete_targets:
                 payload["delete_targets"] = delete_targets
             if finish_after_delete:
