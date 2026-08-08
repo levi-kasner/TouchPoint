@@ -35,7 +35,7 @@ Or open the file in this repo and copy its full contents.
    - `ShellGivingTemplate`
    - `ShellRegistrationTemplate`
    - `ShellGivingWorkingCopy`
-4. Complete the **Registration** step (required). Choose an existing registration form involvement for the editor preview (preferably a testing form, not one published externally). You can create one in Involvement Search, return to the installer, refresh the list, and select it.
+4. Complete the **Registration** step (required). Choose an existing registration form involvement for the editor preview (preferably a testing form, not one published externally). You can create one from the main navigation, return to the installer, refresh the list, and select it.
 5. Optionally configure **Giving**, **Login**, and the Admin reports menu link.
 6. When finished, open **Shell Editor** from the success page, or go to `/PyScriptForm/ShellEditor`.
 

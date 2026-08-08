@@ -4358,18 +4358,15 @@ def render_registration():
         label = "Preview involvement"
         submit = "Use selected involvement"
         help_extra = (
-            "Need to create one first? "
-            "<a href='/OrgSearch' target='_blank' rel='noopener'>Open Involvement Search</a> "
-            "(new tab), create a registration form involvement for testing, then click the "
-            "list below to refresh."
+            "Need to create one first? Use the main navigation to create a registration "
+            "form involvement for testing, then click the list above to refresh."
         )
         empty = ""
         if not rows:
             empty = (
                 '<div class="sei-alert warn">No open registration form involvements found yet. '
-                "Create one at <a href='/OrgSearch' target='_blank' rel='noopener'>"
-                "/OrgSearch</a>, make sure registration is open, then refresh the list "
-                "below.</div>"
+                "Create one from the main navigation, make sure registration is open, then "
+                "click the list to refresh.</div>"
             )
         field_name = "preview_org_id"
 
