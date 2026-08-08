@@ -3736,17 +3736,71 @@ def is_developer():
     except Exception:
         return False
 
+def content_rows_by_name(names):
+    """Read-only lookup of Special Content Id/TypeID by name."""
+    clean = []
+    for n in names or []:
+        n = str(n or "").strip()
+        if n and n not in clean:
+            clean.append(n)
+    if not clean:
+        return {}
+    in_list = ",".join("'" + n.replace("'", "''") + "'" for n in clean)
+    sql = (
+        "SELECT c.Id, c.Name, c.TypeID "
+        "FROM dbo.Content c "
+        "WHERE c.Name IN (" + in_list + ")"
+    )
+    found = {}
+    try:
+        for row in q.QuerySql(sql):
+            name = str(getattr(row, "Name", "") or "")
+            try:
+                cid = int(getattr(row, "Id", 0) or 0)
+            except Exception:
+                cid = 0
+            tid = getattr(row, "TypeID", None)
+            try:
+                tid = int(tid) if tid is not None and str(tid) != "" else None
+            except Exception:
+                tid = None
+            if name and cid > 0:
+                found[name] = {"id": cid, "typeId": tid}
+    except Exception:
+        found = {}
+    return found
+
+def _attach_content_ids(targets):
+    rows = content_rows_by_name([t.get("name") for t in targets])
+    for t in targets:
+        info = rows.get(t.get("name"))
+        if not info:
+            continue
+        t["id"] = info["id"]
+        if info.get("typeId") is not None:
+            t["typeId"] = info["typeId"]
+    return targets
+
 def uninstall_content_targets(remove_templates):
-    """Special Content (name, type) pairs the browser deletes with session auth."""
-    targets = [{"name": EDITOR_NAME, "type": "PythonScript"}]
+    """Special Content targets the browser deletes with session auth.
+
+    Includes Id/TypeID when SQL can resolve them so deletes do not depend on
+    Type string matching in /api/v1/SpecialContentFiles.
+    """
+    targets = [{"name": EDITOR_NAME, "type": "PythonScript", "required": True}]
     if remove_templates:
         targets.extend([
-            {"name": REG_TEMPLATE, "type": "Html"},
-            {"name": GIVING_TEMPLATE, "type": "Html"},
-            {"name": GIVING_WORKING_COPY, "type": "Html"},
-            {"name": LOGIN_TEMPLATE, "type": "Html"},
+            {"name": REG_TEMPLATE, "type": "Html", "required": True},
+            {"name": GIVING_TEMPLATE, "type": "Html", "required": True},
+            {"name": GIVING_WORKING_COPY, "type": "Html", "required": True},
+            {"name": LOGIN_TEMPLATE, "type": "Html", "required": True},
         ])
-    return targets
+    return _attach_content_ids(targets)
+
+def installer_delete_target():
+    return _attach_content_ids([
+        {"name": INSTALLER_NAME, "type": "PythonScript", "required": True}
+    ])[0]
 
 def clear_shell_editor_settings():
     keys = [
@@ -4604,44 +4658,122 @@ SCRIPT = r"""
         });
       });
   }
+  function asSpecialContentList(payload){
+    if(Array.isArray(payload)) return payload;
+    if(!payload || typeof payload!=='object') return [];
+    if(Array.isArray(payload.files)) return payload.files;
+    if(Array.isArray(payload.items)) return payload.items;
+    if(Array.isArray(payload.value)) return payload.value;
+    if(Array.isArray(payload.data)) return payload.data;
+    return [];
+  }
+  function typeCandidates(typ){
+    var t=String(typ==null?'':typ).trim();
+    var out=[];
+    function add(v){ if(v!=='' && out.indexOf(v)<0) out.push(String(v)); }
+    add(t);
+    var low=t.toLowerCase();
+    if(low==='html' || low==='0'){ add('Html'); add('HTML'); add('0'); }
+    if(low==='pythonscript' || low==='python' || low==='3'){
+      add('PythonScript'); add('python'); add('3');
+    }
+    return out;
+  }
+  function findSpecialContentFile(files, name, typ){
+    var want=String(name||'').toLowerCase();
+    var matches=[];
+    (files||[]).forEach(function(f){
+      var n=String(f.Name!=null?f.Name:(f.name||'')).toLowerCase();
+      if(n===want) matches.push(f);
+    });
+    if(!matches.length) return null;
+    if(matches.length===1) return matches[0];
+    var cands=typeCandidates(typ).map(function(x){ return String(x).toLowerCase(); });
+    for(var i=0;i<matches.length;i++){
+      var ft=String(matches[i].Type!=null?matches[i].Type:(matches[i].type||'')).toLowerCase();
+      if(cands.indexOf(ft)>=0) return matches[i];
+    }
+    return matches[0];
+  }
   function deleteSpecialContentTargets(targets){
     // Same session auth the editor uses for /api/v1 calls.
-    return fetch('/api/v1/SpecialContentFiles',{
-      method:'GET',
-      credentials:'same-origin',
-      headers:{'Accept':'application/json'}
-    }).then(function(r){
-      if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
-      return r.json();
-    }).then(function(files){
-      var byKey={};
-      (files||[]).forEach(function(f){
-        byKey[String(f.Name||'')+'|'+String(f.Type||'')]=f;
+    var listPromise=null;
+    function listFiles(){
+      if(listPromise) return listPromise;
+      listPromise=fetch('/api/v1/SpecialContentFiles',{
+        method:'GET',
+        credentials:'same-origin',
+        headers:{'Accept':'application/json'}
+      }).then(function(r){
+        if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
+        return r.json();
+      }).then(asSpecialContentList);
+      return listPromise;
+    }
+    function deleteById(name, id, typ){
+      var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
+        +'?type='+encodeURIComponent(typ);
+      return fetch(url,{
+        method:'DELETE',
+        credentials:'same-origin',
+        headers:{'Accept':'application/json'}
+      }).then(function(r){
+        if(!r.ok) throw new Error('Could not delete '+name+' ('+r.status+')');
+        return String(name)+': deleted';
       });
-      var chain=Promise.resolve();
-      var results=[];
-      (targets||[]).forEach(function(t){
-        chain=chain.then(function(){
-          var key=String(t.name||'')+'|'+String(t.type||'');
-          var f=byKey[key];
-          if(!f){
-            results.push(String(t.name||'')+': not found');
-            return;
-          }
-          var url='/api/v1/SpecialContent/'+encodeURIComponent(f.Id)
-            +'?type='+encodeURIComponent(t.type||'');
-          return fetch(url,{
-            method:'DELETE',
-            credentials:'same-origin',
-            headers:{'Accept':'application/json'}
-          }).then(function(r){
-            if(!r.ok) throw new Error('Could not delete '+t.name+' ('+r.status+')');
-            results.push(String(t.name||'')+': deleted');
+    }
+    function deleteOne(t){
+      var name=String(t.name||'');
+      var typ=String(t.type||'Html');
+      var id=t.id!=null?t.id:null;
+      var attempt=function(typeValue){
+        return deleteById(name, id, typeValue);
+      };
+      var runWithId=function(){
+        var cands=[];
+        if(t.typeId!=null && String(t.typeId)!=='') cands.push(String(t.typeId));
+        typeCandidates(typ).forEach(function(c){
+          if(cands.indexOf(c)<0) cands.push(c);
+        });
+        var p=Promise.reject(new Error('no type'));
+        cands.forEach(function(c){
+          p=p.catch(function(){ return attempt(c); });
+        });
+        return p;
+      };
+      if(id!=null && String(id)!==''){
+        return runWithId().catch(function(err){
+          // Id may be stale; fall back to list lookup by name.
+          return listFiles().then(function(files){
+            var f=findSpecialContentFile(files, name, typ);
+            if(!f) throw err;
+            id=f.Id!=null?f.Id:f.id;
+            var apiType=f.Type!=null?f.Type:(f.type!=null?f.type:typ);
+            typ=String(apiType);
+            return runWithId();
           });
         });
+      }
+      return listFiles().then(function(files){
+        var f=findSpecialContentFile(files, name, typ);
+        if(!f){
+          if(t.required) throw new Error(name+' not found in Special Content');
+          return name+': not found';
+        }
+        id=f.Id!=null?f.Id:f.id;
+        var apiType=f.Type!=null?f.Type:(f.type!=null?f.type:typ);
+        typ=String(apiType);
+        return runWithId();
       });
-      return chain.then(function(){ return results; });
+    }
+    var chain=Promise.resolve();
+    var results=[];
+    (targets||[]).forEach(function(t){
+      chain=chain.then(function(){
+        return deleteOne(t).then(function(line){ results.push(line); });
+      });
     });
+    return chain.then(function(){ return results; });
   }
   // PyScriptForm only paints model.Form on GET. Submit actions via AJAX, then navigate.
   document.addEventListener('submit', function(ev){
@@ -4714,18 +4846,22 @@ SCRIPT = r"""
         if(data.delete_targets && data.delete_targets.length){
           chain=chain.then(function(){
             return deleteSpecialContentTargets(data.delete_targets);
+          }).then(function(results){
+            var deleted=(results||[]).filter(function(r){ return String(r).indexOf(': deleted')>=0; });
+            if(!deleted.length){
+              throw new Error('No Special Content files were deleted.');
+            }
+            if(data.notice){
+              data.notice=data.notice+' ('+deleted.join('; ')+')';
+            }
           }).catch(function(err){
             throw new Error('Special Content delete failed: '+((err&&err.message)||err));
           });
         }
-        // Remove installer in the browser, then paint Finish (script is gone).
-        if(data.delete_installer){
+        // After installer delete, paint Finish here (script can no longer be loaded).
+        if(data.finish_after_delete){
           return chain.then(function(){
-            return deleteSpecialContentTargets([
-              {name:'ShellEditorInstaller', type:'PythonScript'}
-            ]);
-          }).then(function(){
-            showUninstallFinish('Installer removed.');
+            showUninstallFinish(data.notice||'Installer removed.');
           });
         }
         return chain.then(function(){
@@ -4921,7 +5057,7 @@ try:
             ok = True
             assign_shell = None
             delete_targets = None
-            delete_installer = False
+            finish_after_delete = False
             if action == "install_files":
                 ok, msg = action_install_files()
                 notice, notice_kind = msg, ("ok" if ok else "err")
@@ -4981,9 +5117,10 @@ try:
                     next_step = "uninstall_installer"
                 else:
                     ok = True
-                    notice, notice_kind = "Removing installer…", "ok"
+                    notice, notice_kind = "Installer removed.", "ok"
                     next_step = "uninstall_done"
-                    delete_installer = True
+                    delete_targets = [installer_delete_target()]
+                    finish_after_delete = True
             elif action == "keep_installer":
                 ok = True
                 notice, notice_kind = "Installer kept.", "info"
@@ -5003,8 +5140,8 @@ try:
                 payload["assign_shell"] = assign_shell
             if delete_targets:
                 payload["delete_targets"] = delete_targets
-            if delete_installer:
-                payload["delete_installer"] = True
+            if finish_after_delete:
+                payload["finish_after_delete"] = True
             emit_json(payload)
     else:
         # GET: render the wizard page.
