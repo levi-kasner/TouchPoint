@@ -4794,81 +4794,72 @@ SCRIPT = r"""
     return seq.then(function(){ return cleared; });
   }
   function deleteSpecialContentTargets(targets){
-    // Same session auth the editor uses for /api/v1 calls.
-    // Exactly like the CmsApi example: list files, key by (name, type), delete id+type.
-    return fetch('/api/v1/SpecialContentFiles',{
-      method:'GET',
-      credentials:'same-origin',
-      headers:{'Accept':'application/json'}
-    }).then(function(r){
-      if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
-      return r.json();
-    }).then(function(payload){
-      var files=asSpecialContentList(payload);
-      var byKey={};
-      (files||[]).forEach(function(f){
-        var n=fName(f);
-        var typ=fTypeId(f);
-        if(!n || typ==null) return;
-        byKey[n.toLowerCase()+'|'+typ]=f;
+    // CmsApi DELETE /v1/SpecialContent/{id} fails with HTTP 400 when ContentKeywords
+    // rows exist (FK) — see bvcms Content_DeleteOperations + DataStoreService_Content.
+    // The Special Content admin UI deletes via Display/ContentDelete/{id}, which removes
+    // ContentKeywords first. Use that path with the browser session.
+    function resolveIds(){
+      var missing=(targets||[]).some(function(t){ return t.id==null || String(t.id)===''; });
+      if(!missing) return Promise.resolve(targets||[]);
+      return fetch('/api/v1/SpecialContentFiles',{
+        method:'GET',
+        credentials:'same-origin',
+        headers:{'Accept':'application/json'}
+      }).then(function(r){
+        if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
+        return r.json();
+      }).then(function(payload){
+        var files=asSpecialContentList(payload);
+        return (targets||[]).map(function(t){
+          if(t.id!=null && String(t.id)!=='') return t;
+          var typeId=parseInt(t.typeId,10);
+          var f=findSpecialContentFile(files, t.name, typeId);
+          if(!f) return t;
+          var copy={};
+          for(var k in t){ if(Object.prototype.hasOwnProperty.call(t,k)) copy[k]=t[k]; }
+          copy.id=fId(f);
+          if(fTypeId(f)!=null) copy.typeId=fTypeId(f);
+          return copy;
+        });
       });
+    }
+    function deleteOne(t){
+      var name=String(t.name||'');
+      var id=t.id;
+      if(id==null || String(id)===''){
+        if(t.required) throw new Error('NOT FOUND: '+name+' (no content id)');
+        return Promise.resolve(name+': not found');
+      }
+      var paths=[
+        '/Display/ContentDelete/'+encodeURIComponent(id),
+        '/Manage/Display/ContentDelete/'+encodeURIComponent(id)
+      ];
+      var attempt=function(url){
+        return fetch(url,{
+          method:'GET',
+          credentials:'same-origin',
+          redirect:'follow'
+        }).then(function(r){
+          // MVC action redirects to the Special Content index on success.
+          if(r.ok || (r.status>=300 && r.status<400)) return name+': deleted';
+          throw new Error('HTTP '+r.status);
+        });
+      };
+      return attempt(paths[0]).catch(function(){
+        return attempt(paths[1]);
+      }).catch(function(err){
+        throw new Error(
+          'Could not delete '+name+' (id '+id+'): '
+          +((err&&err.message)||err)
+        );
+      });
+    }
+    return resolveIds().then(function(list){
       var chain=Promise.resolve();
       var results=[];
-      (targets||[]).forEach(function(t){
+      list.forEach(function(t){
         chain=chain.then(function(){
-          var name=String(t.name||'');
-          var typeId=parseInt(t.typeId,10);
-          if(isNaN(typeId)){
-            throw new Error(name+' is missing numeric type id for delete');
-          }
-          var f=byKey[name.toLowerCase()+'|'+typeId]
-            || findSpecialContentFile(files, name, typeId);
-          if(!f){
-            // Help diagnose: show what types exist for this name.
-            var seen=[];
-            (files||[]).forEach(function(x){
-              if(fName(x).toLowerCase()===name.toLowerCase()){
-                seen.push(String(fTypeId(x)));
-              }
-            });
-            var hint=seen.length
-              ? (' Found same name with type(s): '+seen.join(', ')+'.')
-              : ' Name not present in SpecialContentFiles.';
-            if(t.required){
-              throw new Error('NOT FOUND: '+name+' (type '+typeId+').'+hint);
-            }
-            results.push(name+': not found');
-            return;
-          }
-          var id=fId(f);
-          typeId=fTypeId(f);
-          if(id==null || typeId==null){
-            throw new Error(name+' list entry is missing id/type');
-          }
-          var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
-            +'?type='+encodeURIComponent(typeId);
-          return fetch(url,{
-            method:'DELETE',
-            credentials:'same-origin',
-            headers:{'Accept':'application/json'}
-          }).then(function(r){
-            if(r.ok){
-              results.push(name+': deleted');
-              return;
-            }
-            return r.text().then(function(body){
-              var detail=(body||'').replace(/\s+/g,' ').trim();
-              if(detail.length>160) detail=detail.slice(0,160)+'…';
-              var hint='';
-              if(typeId===0){
-                hint=' If this HTML shell is still assigned to a registration/giving/login page, clear that assignment first.';
-              }
-              throw new Error(
-                'Could not delete '+name+' (id '+id+', type '+typeId
-                +', HTTP '+r.status+(detail?': '+detail:'')+').'+hint
-              );
-            });
-          });
+          return deleteOne(t).then(function(line){ results.push(line); });
         });
       });
       return chain.then(function(){ return results; });
