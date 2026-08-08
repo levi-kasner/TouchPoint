@@ -3781,26 +3781,70 @@ def _attach_content_ids(targets):
             t["typeId"] = info["typeId"]
     return targets
 
+# SpecialContentTypes ids for DELETE ?type= (Html=0, PythonScript=5).
+CONTENT_TYPE_HTML = 0
+CONTENT_TYPE_PYTHON = 5
+
 def uninstall_content_targets(remove_templates):
     """Special Content targets the browser deletes with session auth.
 
-    Includes Id/TypeID when SQL can resolve them so deletes do not depend on
-    Type string matching in /api/v1/SpecialContentFiles.
+    typeId is the numeric SpecialContentTypes id required by the delete API.
     """
-    targets = [{"name": EDITOR_NAME, "type": "PythonScript", "required": True}]
+    targets = [{
+        "name": EDITOR_NAME,
+        "typeId": CONTENT_TYPE_PYTHON,
+        "required": True,
+    }]
     if remove_templates:
-        targets.extend([
-            {"name": REG_TEMPLATE, "type": "Html", "required": True},
-            {"name": GIVING_TEMPLATE, "type": "Html", "required": True},
-            {"name": GIVING_WORKING_COPY, "type": "Html", "required": True},
-            {"name": LOGIN_TEMPLATE, "type": "Html", "required": True},
-        ])
-    return _attach_content_ids(targets)
+        for n in (REG_TEMPLATE, GIVING_TEMPLATE, GIVING_WORKING_COPY, LOGIN_TEMPLATE):
+            targets.append({
+                "name": n,
+                "typeId": CONTENT_TYPE_HTML,
+                "required": True,
+            })
+    # Prefer SQL Ids when available; keep declared typeIds as source of truth.
+    rows = content_rows_by_name([t.get("name") for t in targets])
+    for t in targets:
+        info = rows.get(t.get("name"))
+        if info:
+            t["id"] = info["id"]
+    return targets
 
 def installer_delete_target():
-    return _attach_content_ids([
-        {"name": INSTALLER_NAME, "type": "PythonScript", "required": True}
-    ])[0]
+    target = {
+        "name": INSTALLER_NAME,
+        "typeId": CONTENT_TYPE_PYTHON,
+        "required": True,
+    }
+    rows = content_rows_by_name([INSTALLER_NAME])
+    info = rows.get(INSTALLER_NAME)
+    if info:
+        target["id"] = info["id"]
+    return target
+
+def orgs_using_reg_shell(shell_name):
+    """Involvement ids whose RegSetting still references the given shell name."""
+    shell_name = (shell_name or "").strip()
+    if not shell_name:
+        return []
+    safe = shell_name.replace("'", "''")
+    sql = (
+        "SELECT o.OrganizationId "
+        "FROM dbo.Organizations o "
+        "WHERE o.RegSetting LIKE '%" + safe + "%'"
+    )
+    ids = []
+    try:
+        for row in q.QuerySql(sql):
+            try:
+                oid = int(getattr(row, "OrganizationId", 0) or 0)
+            except Exception:
+                oid = 0
+            if oid > 0 and oid not in ids:
+                ids.append(oid)
+    except Exception:
+        ids = []
+    return ids
 
 def clear_shell_editor_settings():
     keys = [
@@ -4076,8 +4120,9 @@ def action_uninstall(remove_templates):
     if unassign_reg:
         meta["unassign_reg"] = unassign_reg
     if remove_templates:
-        # Client clears this shell on open reg forms before delete (avoids HTTP 400).
+        # Client must clear live shell assignments before DELETE (API returns 400 otherwise).
         meta["clear_reg_shell_name"] = REG_TEMPLATE
+        meta["unassign_reg_org_ids"] = orgs_using_reg_shell(REG_TEMPLATE)
     return True, msg, meta
 
 # ========================= UI =========================
@@ -4679,40 +4724,37 @@ SCRIPT = r"""
     if(Array.isArray(payload.data)) return payload.data;
     return [];
   }
-  function typeCandidates(typ, typeId){
-    var t=String(typ==null?'':typ).trim();
-    var out=[];
-    function add(v){ if(v!=='' && out.indexOf(String(v))<0) out.push(String(v)); }
-    // Prefer API enum names; numeric TypeID often yields HTTP 400.
-    add(t);
-    var low=t.toLowerCase();
-    if(low==='html' || low==='0'){ add('Html'); add('HTML'); }
-    if(low==='pythonscript' || low==='python' || low==='3'){
-      add('PythonScript');
-    }
-    if(typeId!=null && String(typeId)!=='') add(typeId);
-    if(low==='html') add('0');
-    if(low==='pythonscript' || low==='python') add('3');
-    return out;
-  }
-  function findSpecialContentFile(files, name, typ){
+  function findSpecialContentFile(files, name, typeId){
+    // SpecialContentFiles uses camelCase keys; type is numeric (Html=0, PythonScript=5).
     var want=String(name||'').toLowerCase();
-    var matches=[];
+    var wantType=parseInt(typeId,10);
+    var byName=[];
     (files||[]).forEach(function(f){
-      var n=String(f.Name!=null?f.Name:(f.name||'')).toLowerCase();
-      if(n===want) matches.push(f);
+      var n=String(f.name!=null?f.name:(f.Name||'')).toLowerCase();
+      if(n===want) byName.push(f);
     });
-    if(!matches.length) return null;
-    if(matches.length===1) return matches[0];
-    var cands=typeCandidates(typ).map(function(x){ return String(x).toLowerCase(); });
-    for(var i=0;i<matches.length;i++){
-      var ft=String(matches[i].Type!=null?matches[i].Type:(matches[i].type||'')).toLowerCase();
-      if(cands.indexOf(ft)>=0) return matches[i];
+    if(!byName.length) return null;
+    if(!isNaN(wantType)){
+      for(var i=0;i<byName.length;i++){
+        var ft=fTypeId(byName[i]);
+        if(ft===wantType) return byName[i];
+      }
     }
-    return matches[0];
+    return byName[0];
+  }
+  function fTypeId(f){
+    if(!f) return null;
+    var v=(f.type!=null?f.type:(f.Type!=null?f.Type:(f.typeId!=null?f.typeId:f.TypeId)));
+    var n=parseInt(v,10);
+    return isNaN(n)?null:n;
+  }
+  function fId(f){
+    if(!f) return null;
+    var v=(f.id!=null?f.id:f.Id);
+    return v!=null?v:null;
   }
   function unassignRegShell(orgId, shellName){
-    if(!orgId || !shellName) return Promise.resolve();
+    if(!orgId || !shellName) return Promise.resolve(false);
     var settingsUrl='/api/v1/Involvements/'+encodeURIComponent(orgId)+'/Registrations/Settings';
     return fetch(settingsUrl,{method:'GET',credentials:'same-origin',headers:{'Accept':'application/json'}})
       .then(function(r){
@@ -4722,7 +4764,7 @@ SCRIPT = r"""
       .then(function(settings){
         settings=settings||{};
         var cur=String(settings.regShellId||'').trim();
-        if(!cur || cur.toLowerCase()!==String(shellName).toLowerCase()) return;
+        if(!cur || cur.toLowerCase()!==String(shellName).toLowerCase()) return false;
         settings.regShellId='';
         return fetch(settingsUrl,{
           method:'POST',
@@ -4731,12 +4773,30 @@ SCRIPT = r"""
           body:JSON.stringify(settings)
         }).then(function(r){
           if(!r.ok) throw new Error('Could not clear registration shell ('+r.status+')');
+          return true;
         });
       });
   }
+  function clearRegShellAssignments(shellName, orgIds){
+    var ids=[];
+    (orgIds||[]).forEach(function(id){
+      var n=parseInt(id,10);
+      if(n>0 && ids.indexOf(n)<0) ids.push(n);
+    });
+    var seq=Promise.resolve();
+    var cleared=0;
+    ids.forEach(function(oid){
+      seq=seq.then(function(){
+        return unassignRegShell(oid, shellName)
+          .then(function(did){ if(did) cleared+=1; })
+          .catch(function(){ /* skip */ });
+      });
+    });
+    return seq.then(function(){ return cleared; });
+  }
   function deleteSpecialContentTargets(targets){
     // Same session auth the editor uses for /api/v1 calls.
-    // Resolve Id/Type from SpecialContentFiles (authoritative), then DELETE.
+    // List uses camelCase {id,name,type}; DELETE ?type= is the numeric type id.
     return fetch('/api/v1/SpecialContentFiles',{
       method:'GET',
       credentials:'same-origin',
@@ -4751,43 +4811,43 @@ SCRIPT = r"""
       (targets||[]).forEach(function(t){
         chain=chain.then(function(){
           var name=String(t.name||'');
-          var f=findSpecialContentFile(files, name, t.type);
-          var id=f?(f.Id!=null?f.Id:f.id):t.id;
-          var apiType=f?(f.Type!=null?f.Type:(f.type!=null?f.type:t.type)):t.type;
+          var typeId=parseInt(t.typeId,10);
+          if(isNaN(typeId)){
+            throw new Error(name+' is missing numeric type id for delete');
+          }
+          var f=findSpecialContentFile(files, name, typeId);
+          var id=f?fId(f):t.id;
           if(id==null || String(id)===''){
-            if(t.required) throw new Error(name+' not found in Special Content');
+            if(t.required){
+              throw new Error('NOT FOUND: '+name+' (type '+typeId+')');
+            }
             results.push(name+': not found');
             return;
           }
-          var cands=typeCandidates(apiType, t.typeId);
-          // Ensure declared type is tried even if API Type is odd.
-          typeCandidates(t.type, t.typeId).forEach(function(c){
-            if(cands.indexOf(c)<0) cands.push(c);
-          });
-          var attempt=function(typ){
-            var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
-              +'?type='+encodeURIComponent(typ);
-            return fetch(url,{
-              method:'DELETE',
-              credentials:'same-origin',
-              headers:{'Accept':'application/json'}
-            }).then(function(r){
-              if(r.ok) return name+': deleted';
-              return r.text().then(function(body){
-                var detail=(body||'').replace(/\s+/g,' ').trim();
-                if(detail.length>180) detail=detail.slice(0,180)+'…';
-                throw new Error(
-                  'Could not delete '+name+' ('+r.status
-                  +(detail?': '+detail:'')+'; type='+typ+')'
-                );
-              });
+          // Prefer type from the listed file when present (authoritative).
+          var fileType=fTypeId(f);
+          if(fileType!=null) typeId=fileType;
+          var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
+            +'?type='+encodeURIComponent(typeId);
+          return fetch(url,{
+            method:'DELETE',
+            credentials:'same-origin',
+            headers:{'Accept':'application/json'}
+          }).then(function(r){
+            if(r.ok){
+              results.push(name+': deleted');
+              return;
+            }
+            return r.text().then(function(body){
+              var detail=(body||'').replace(/\s+/g,' ').trim();
+              if(detail.length>160) detail=detail.slice(0,160)+'…';
+              throw new Error(
+                'Could not delete '+name+' (id '+id+', type '+typeId
+                +', HTTP '+r.status+(detail?': '+detail:'')
+                +'). If this shell is still assigned to a registration form, clear it first.'
+              );
             });
-          };
-          var p=Promise.reject(new Error('no type'));
-          cands.forEach(function(c){
-            p=p.catch(function(){ return attempt(c); });
           });
-          return p.then(function(line){ results.push(line); });
         });
       });
       return chain.then(function(){ return results; });
@@ -4861,35 +4921,14 @@ SCRIPT = r"""
               data.notice_kind='warn';
             });
         }
-        // Templates still assigned to a live form often return HTTP 400 on delete.
-        if(data.unassign_reg && data.unassign_reg.orgId && data.unassign_reg.shellName){
-          chain=chain.then(function(){
-            return unassignRegShell(data.unassign_reg.orgId, data.unassign_reg.shellName);
-          }).catch(function(err){
-            data.notice=(data.notice?data.notice+' ':'')
-              +'Could not clear registration shell before delete: '
-              +((err&&err.message)||err);
-            data.notice_kind='warn';
-          });
-        }
+        // Templates still assigned in Organizations.RegSetting return HTTP 400 on delete.
         if(data.clear_reg_shell_name){
           chain=chain.then(function(){
-            var body=new FormData();
-            body.append('action','list_reg_involvements');
-            return fetch(window.location.pathname,{method:'POST',body:body,credentials:'same-origin'})
-              .then(function(r){ return r.text(); })
-              .then(function(txt){
-                var listed=parseSeiJson(txt);
-                var rows=(listed&&listed.involvements)||[];
-                var seq=Promise.resolve();
-                rows.forEach(function(row){
-                  seq=seq.then(function(){
-                    return unassignRegShell(row.id, data.clear_reg_shell_name)
-                      .catch(function(){ /* skip involvements we cannot update */ });
-                  });
-                });
-                return seq;
-              });
+            var ids=(data.unassign_reg_org_ids||[]).slice();
+            if(data.unassign_reg && data.unassign_reg.orgId){
+              ids.push(data.unassign_reg.orgId);
+            }
+            return clearRegShellAssignments(data.clear_reg_shell_name, ids);
           });
         }
         if(data.delete_targets && data.delete_targets.length){
@@ -5108,6 +5147,7 @@ try:
             delete_targets = None
             unassign_reg = None
             clear_reg_shell_name = None
+            unassign_reg_org_ids = None
             finish_after_delete = False
             if action == "install_files":
                 ok, msg = action_install_files()
@@ -5163,6 +5203,7 @@ try:
                 delete_targets = meta.get("delete_targets")
                 unassign_reg = meta.get("unassign_reg")
                 clear_reg_shell_name = meta.get("clear_reg_shell_name")
+                unassign_reg_org_ids = meta.get("unassign_reg_org_ids")
                 notice, notice_kind = msg, ("ok" if ok else "err")
                 next_step = "uninstall_installer" if ok else "uninstall"
             elif action == "uninstall_installer":
@@ -5197,6 +5238,8 @@ try:
                 payload["unassign_reg"] = unassign_reg
             if clear_reg_shell_name:
                 payload["clear_reg_shell_name"] = clear_reg_shell_name
+            if unassign_reg_org_ids:
+                payload["unassign_reg_org_ids"] = unassign_reg_org_ids
             if delete_targets:
                 payload["delete_targets"] = delete_targets
             if finish_after_delete:
