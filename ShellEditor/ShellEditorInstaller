@@ -4724,24 +4724,6 @@ SCRIPT = r"""
     if(Array.isArray(payload.data)) return payload.data;
     return [];
   }
-  function findSpecialContentFile(files, name, typeId){
-    // SpecialContentFiles uses camelCase keys; type is numeric (Html=0, PythonScript=5).
-    var want=String(name||'').toLowerCase();
-    var wantType=parseInt(typeId,10);
-    var byName=[];
-    (files||[]).forEach(function(f){
-      var n=String(f.name!=null?f.name:(f.Name||'')).toLowerCase();
-      if(n===want) byName.push(f);
-    });
-    if(!byName.length) return null;
-    if(!isNaN(wantType)){
-      for(var i=0;i<byName.length;i++){
-        var ft=fTypeId(byName[i]);
-        if(ft===wantType) return byName[i];
-      }
-    }
-    return byName[0];
-  }
   function fTypeId(f){
     if(!f) return null;
     var v=(f.type!=null?f.type:(f.Type!=null?f.Type:(f.typeId!=null?f.typeId:f.TypeId)));
@@ -4752,6 +4734,23 @@ SCRIPT = r"""
     if(!f) return null;
     var v=(f.id!=null?f.id:f.Id);
     return v!=null?v:null;
+  }
+  function fName(f){
+    if(!f) return '';
+    return String(f.name!=null?f.name:(f.Name||''));
+  }
+  function findSpecialContentFile(files, name, typeId){
+    // Match the working CmsApi example: key is (name, numeric type). No cross-pairing.
+    var want=String(name||'').toLowerCase();
+    var wantType=parseInt(typeId,10);
+    var match=null;
+    var byName=null;
+    (files||[]).forEach(function(f){
+      if(fName(f).toLowerCase()!==want) return;
+      if(!byName) byName=f;
+      if(!isNaN(wantType) && fTypeId(f)===wantType) match=f;
+    });
+    return match;
   }
   function unassignRegShell(orgId, shellName){
     if(!orgId || !shellName) return Promise.resolve(false);
@@ -4796,7 +4795,7 @@ SCRIPT = r"""
   }
   function deleteSpecialContentTargets(targets){
     // Same session auth the editor uses for /api/v1 calls.
-    // List uses camelCase {id,name,type}; DELETE ?type= is the numeric type id.
+    // Exactly like the CmsApi example: list files, key by (name, type), delete id+type.
     return fetch('/api/v1/SpecialContentFiles',{
       method:'GET',
       credentials:'same-origin',
@@ -4806,6 +4805,13 @@ SCRIPT = r"""
       return r.json();
     }).then(function(payload){
       var files=asSpecialContentList(payload);
+      var byKey={};
+      (files||[]).forEach(function(f){
+        var n=fName(f);
+        var typ=fTypeId(f);
+        if(!n || typ==null) return;
+        byKey[n.toLowerCase()+'|'+typ]=f;
+      });
       var chain=Promise.resolve();
       var results=[];
       (targets||[]).forEach(function(t){
@@ -4815,18 +4821,30 @@ SCRIPT = r"""
           if(isNaN(typeId)){
             throw new Error(name+' is missing numeric type id for delete');
           }
-          var f=findSpecialContentFile(files, name, typeId);
-          var id=f?fId(f):t.id;
-          if(id==null || String(id)===''){
+          var f=byKey[name.toLowerCase()+'|'+typeId]
+            || findSpecialContentFile(files, name, typeId);
+          if(!f){
+            // Help diagnose: show what types exist for this name.
+            var seen=[];
+            (files||[]).forEach(function(x){
+              if(fName(x).toLowerCase()===name.toLowerCase()){
+                seen.push(String(fTypeId(x)));
+              }
+            });
+            var hint=seen.length
+              ? (' Found same name with type(s): '+seen.join(', ')+'.')
+              : ' Name not present in SpecialContentFiles.';
             if(t.required){
-              throw new Error('NOT FOUND: '+name+' (type '+typeId+')');
+              throw new Error('NOT FOUND: '+name+' (type '+typeId+').'+hint);
             }
             results.push(name+': not found');
             return;
           }
-          // Prefer type from the listed file when present (authoritative).
-          var fileType=fTypeId(f);
-          if(fileType!=null) typeId=fileType;
+          var id=fId(f);
+          typeId=fTypeId(f);
+          if(id==null || typeId==null){
+            throw new Error(name+' list entry is missing id/type');
+          }
           var url='/api/v1/SpecialContent/'+encodeURIComponent(id)
             +'?type='+encodeURIComponent(typeId);
           return fetch(url,{
@@ -4841,10 +4859,13 @@ SCRIPT = r"""
             return r.text().then(function(body){
               var detail=(body||'').replace(/\s+/g,' ').trim();
               if(detail.length>160) detail=detail.slice(0,160)+'…';
+              var hint='';
+              if(typeId===0){
+                hint=' If this HTML shell is still assigned to a registration/giving/login page, clear that assignment first.';
+              }
               throw new Error(
                 'Could not delete '+name+' (id '+id+', type '+typeId
-                +', HTTP '+r.status+(detail?': '+detail:'')
-                +'). If this shell is still assigned to a registration form, clear it first.'
+                +', HTTP '+r.status+(detail?': '+detail:'')+').'+hint
               );
             });
           });
