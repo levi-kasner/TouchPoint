@@ -4268,15 +4268,6 @@ def render_page(step, notice=None, notice_kind="info"):
 
 def render_welcome():
     # Use GET navigation — PyScriptForm only renders model.Form on GET.
-    uninstall_link = ""
-    if is_developer():
-        uninstall_link = (
-            '<div class="sei-actions" style="margin-top:28px;border-top:1px solid #eee;'
-            'padding-top:16px">'
-            '<a class="btn btn-default" href="?focus=uninstall">Uninstall Shell Editor</a>'
-            '<p class="sei-help">Developer only. Removes the editor, settings, and menu link.</p>'
-            "</div>"
-        )
     return (
         "<p>This installer will:</p>"
         '<ul class="sei-list">'
@@ -4291,7 +4282,6 @@ def render_welcome():
         '<div class="sei-actions">'
         '<a class="btn btn-primary" href="?step=files">Start installation</a>'
         "</div>"
-        + uninstall_link
     )
 
 def render_files():

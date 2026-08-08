@@ -82,6 +82,6 @@ Editable shells use Content Keyword **`Shell`**. Kind (registration / giving / l
 
 ## Uninstall (Developer)
 
-Users with the **Developer** role can open the installer and choose **Uninstall Shell Editor** (also available as `?focus=uninstall`). The wizard removes the editor script, clears Shell Editor settings/preferences, and removes the Admin reports menu link. You can optionally delete the stock template files (with a warning that live pages may be left without a shell). After that, you are asked whether to remove `ShellEditorInstaller` itself, then **Finish** returns to the homepage.
+Users with the **Developer** role can open **Uninstall Shell Editor** from the installer’s done page (or go directly to `?focus=uninstall`). The wizard removes the editor script, clears Shell Editor settings/preferences, and removes the Admin reports menu link. You can optionally delete the stock template files (with a warning that live pages may be left without a shell). After that, you are asked whether to remove `ShellEditorInstaller` itself, then **Finish** returns to the homepage.
 
 Special Content files are deleted through the same browser `/api/v1` session the Shell Editor already uses (no personal access token).
