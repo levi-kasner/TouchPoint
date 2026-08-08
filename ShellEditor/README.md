@@ -79,3 +79,9 @@ If the in-editor update cannot reach GitHub, you can still update manually:
 | Menu (if enabled) | Admin reports menu → **Shell Editor** |
 
 Editable shells use Content Keyword **`Shell`**. Kind (registration / giving / login) is identified by a marker comment at the top of the HTML body.
+
+## Uninstall (Developer)
+
+Users with the **Developer** role can open the installer and choose **Uninstall Shell Editor** (also available as `?focus=uninstall`). The wizard removes the editor script, clears Shell Editor settings/preferences, and removes the Admin reports menu link. You can optionally delete the stock template files (with a warning that live pages may be left without a shell). After that, you are asked whether to remove `ShellEditorInstaller` itself, then **Finish** returns to the homepage.
+
+Special Content files are deleted through the same browser `/api/v1` session the Shell Editor already uses (no personal access token).

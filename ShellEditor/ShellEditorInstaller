@@ -44,6 +44,9 @@ MENU_MAX_COLUMNS = 4
 MENU_COLUMN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-./]{0,60}$")
 
 STEPS = ["welcome", "files", "registration", "giving", "login", "menu", "done"]
+UNINSTALL_STEPS = ["uninstall", "uninstall_installer", "uninstall_done"]
+
+CFG_GIVING_ACTIVE_SHELL = "ShellEditor-GivingActiveShell"
 
 # ==== BEGIN EMBEDDED PAYLOADS (generated; do not edit) ====
 PAYLOADS = {
@@ -3727,17 +3730,80 @@ def emit_json(payload):
     except Exception:
         pass
 
+def is_developer():
+    try:
+        return bool(model.UserIsInRole("Developer"))
+    except Exception:
+        return False
+
+def uninstall_content_targets(remove_templates):
+    """Special Content (name, type) pairs the browser deletes with session auth."""
+    targets = [{"name": EDITOR_NAME, "type": "PythonScript"}]
+    if remove_templates:
+        targets.extend([
+            {"name": REG_TEMPLATE, "type": "Html"},
+            {"name": GIVING_TEMPLATE, "type": "Html"},
+            {"name": GIVING_WORKING_COPY, "type": "Html"},
+            {"name": LOGIN_TEMPLATE, "type": "Html"},
+        ])
+    return targets
+
+def clear_shell_editor_settings():
+    keys = [
+        CFG_INVOLVEMENT_ID,
+        CFG_GIVING_PAGE_URL,
+        CFG_GIVING_INSTALLED,
+        CFG_LOGIN_INSTALLED,
+        CFG_REGISTRATION_INSTALLED,
+        CFG_MENU_INSTALLED,
+        CFG_FILES_INSTALLED,
+        CFG_GIVING_ACTIVE_SHELL,
+    ]
+    for key in keys:
+        try:
+            set_setting(key, "")
+        except Exception:
+            pass
+    # Only clear login shell when it still points at our template.
+    try:
+        if get_setting(LOGIN_SHELL_SETTING) == LOGIN_TEMPLATE:
+            set_setting(LOGIN_SHELL_SETTING, "")
+    except Exception:
+        pass
+
+def remove_editor_from_admin_menu():
+    xml = read_menu_xml()
+    if not xml:
+        return False, "Admin reports menu file not found."
+    if not menu_has_editor(xml):
+        set_setting(CFG_MENU_INSTALLED, "")
+        return True, "Shell Editor was not in the Admin reports menu."
+    updated = remove_menu_editor_reports(xml)
+    updated = cleanup_menu_empty_headers(updated)
+    write_menu_xml(updated)
+    set_setting(CFG_MENU_INSTALLED, "")
+    return True, "Removed Shell Editor from the Admin reports menu."
+
 def resolve_step():
     focus = ""
     if model.DataHas("focus"):
         focus = str(model.Dictionary("focus") or "").strip().lower()
+    step = request_val("step").lower()
+    # Developer-only uninstall wizard (separate from install progress).
+    if focus == "uninstall" or step in UNINSTALL_STEPS:
+        if not is_developer():
+            return "welcome"
+        if focus == "uninstall" and step not in UNINSTALL_STEPS:
+            return "uninstall"
+        if step in UNINSTALL_STEPS:
+            return step
+        return "uninstall"
     if focus in STEPS:
         if focus == "giving" and not flag_on(CFG_REGISTRATION_INSTALLED):
             return "registration"
         if focus == "login" and not flag_on(CFG_REGISTRATION_INSTALLED):
             return "registration"
         return focus
-    step = request_val("step")
     if step in STEPS:
         return step
     files_ready = flag_on(CFG_FILES_INSTALLED) or (
@@ -3921,6 +3987,33 @@ def action_configure_menu(add_it, column_choice="", header_choice="", new_header
     set_flag(CFG_MENU_INSTALLED, True)
     return True, msg
 
+def action_uninstall(remove_templates):
+    """Clear menu/settings; return Special Content targets for browser delete.
+
+    Returns (ok, msg, delete_targets). Special Content is deleted in the browser
+    with the same session credentials the editor uses for /api/v1 calls.
+    """
+    if not is_developer():
+        return False, "Uninstall requires the Developer role.", []
+    # 1) Admin reports menu
+    try:
+        ok_menu, menu_msg = remove_editor_from_admin_menu()
+        if not ok_menu:
+            return False, menu_msg, []
+    except Exception as e:
+        return False, "Could not update the Admin reports menu: " + str(e), []
+    # 2) Settings + people ExtraValues (ShellEdit%)
+    clear_shell_editor_settings()
+    try:
+        model.DeleteAllExtraValueLike("ShellEdit%")
+    except Exception:
+        pass
+    targets = uninstall_content_targets(remove_templates)
+    msg = "Shell Editor settings and menu link removed."
+    if not remove_templates:
+        msg += " Template files will be left in place."
+    return True, msg, targets
+
 # ========================= UI =========================
 STYLES = """
 <style>
@@ -3992,8 +4085,28 @@ def step_pills(current):
     html.append("</div>")
     return "".join(html)
 
+def uninstall_step_pills(current):
+    labels = {
+        "uninstall": "1. Uninstall",
+        "uninstall_installer": "2. Installer",
+        "uninstall_done": "Done",
+    }
+    html = ['<div class="sei-steps">']
+    seen = True
+    for s in UNINSTALL_STEPS:
+        cls = "sei-step"
+        if s == current:
+            cls += " on"
+            seen = False
+        elif seen:
+            cls += " done"
+        html.append('<span class="' + cls + '">' + esc(labels[s]) + "</span>")
+    html.append("</div>")
+    return "".join(html)
+
 def render_page(step, notice=None, notice_kind="info"):
     body = ""
+    uninstalling = step in UNINSTALL_STEPS
     if step == "welcome":
         body = render_welcome()
     elif step == "files":
@@ -4006,6 +4119,12 @@ def render_page(step, notice=None, notice_kind="info"):
         body = render_login()
     elif step == "menu":
         body = render_menu()
+    elif step == "uninstall":
+        body = render_uninstall()
+    elif step == "uninstall_installer":
+        body = render_uninstall_installer()
+    elif step == "uninstall_done":
+        body = render_uninstall_done()
     else:
         body = render_done()
 
@@ -4014,13 +4133,23 @@ def render_page(step, notice=None, notice_kind="info"):
         notice_html = (
             '<div class="sei-alert ' + esc(notice_kind) + '">' + notice + "</div>"
         )
+    if uninstalling:
+        title = "Shell Editor Uninstall"
+        sub = "Remove Shell Editor from this church database."
+        pills = uninstall_step_pills(step)
+    else:
+        title = "Shell Editor Installer"
+        sub = (
+            "Create the editor Special Content, configure preview targets, "
+            "and optionally add a menu link."
+        )
+        pills = step_pills(step)
     return "".join([
         '<div class="sei-wrap">',
         '<div class="sei-card">',
-        '<h1 class="sei-h1">Shell Editor Installer</h1>',
-        '<p class="sei-sub">Create the editor Special Content, configure preview targets, '
-        "and optionally add a menu link.</p>",
-        step_pills(step),
+        '<h1 class="sei-h1">' + esc(title) + "</h1>",
+        '<p class="sei-sub">' + esc(sub) + "</p>",
+        pills,
         notice_html,
         body,
         "</div></div>",
@@ -4028,19 +4157,31 @@ def render_page(step, notice=None, notice_kind="info"):
 
 def render_welcome():
     # Use GET navigation — PyScriptForm only renders model.Form on GET.
-    return """
-<p>This installer will:</p>
-<ul class="sei-list">
-  <li>Install or update the Shell Editor Python script, and create login / giving /
-      registration templates if they are missing (existing HTML templates are never overwritten)</li>
-  <li>Choose a registration form involvement for the editor preview (required)</li>
-  <li>Optionally configure giving and login preview modules</li>
-  <li>Optionally add <span class="sei-code">Shell Editor</span> to the Admin reports menu</li>
-</ul>
-<div class="sei-actions">
-  <a class="btn btn-primary" href="?step=files">Start installation</a>
-</div>
-"""
+    uninstall_link = ""
+    if is_developer():
+        uninstall_link = (
+            '<div class="sei-actions" style="margin-top:28px;border-top:1px solid #eee;'
+            'padding-top:16px">'
+            '<a class="btn btn-default" href="?focus=uninstall">Uninstall Shell Editor</a>'
+            '<p class="sei-help">Developer only. Removes the editor, settings, and menu link.</p>'
+            "</div>"
+        )
+    return (
+        "<p>This installer will:</p>"
+        '<ul class="sei-list">'
+        "<li>Install or update the Shell Editor Python script, and create login / giving / "
+        "registration templates if they are missing (existing HTML templates are never "
+        "overwritten)</li>"
+        "<li>Choose a registration form involvement for the editor preview (required)</li>"
+        "<li>Optionally configure giving and login preview modules</li>"
+        '<li>Optionally add <span class="sei-code">Shell Editor</span> to the Admin reports '
+        "menu</li>"
+        "</ul>"
+        '<div class="sei-actions">'
+        '<a class="btn btn-primary" href="?step=files">Start installation</a>'
+        "</div>"
+        + uninstall_link
+    )
 
 def render_files():
     names = [EDITOR_NAME, LOGIN_TEMPLATE, GIVING_TEMPLATE, REG_TEMPLATE, GIVING_WORKING_COPY]
@@ -4338,7 +4479,76 @@ def render_done():
         + '?focus=menu">Configure menu</a>',
         "</div>",
     ]
+    if is_developer():
+        bits.append(
+            '<div class="sei-actions" style="margin-top:20px">'
+            '<a class="btn btn-default" href="?focus=uninstall">Uninstall Shell Editor</a>'
+            "</div>"
+        )
     return "".join(bits)
+
+def render_uninstall():
+    if not is_developer():
+        return (
+            '<div class="sei-alert err">Uninstall is limited to the Developer role.</div>'
+            '<div class="sei-actions">'
+            '<a class="btn btn-default" href="?step=welcome">Back</a>'
+            "</div>"
+        )
+    return (
+        "<p>This removes the Shell Editor script, clears its settings and personal "
+        "preferences, and removes it from the Admin reports menu. Custom shells you "
+        "created are kept.</p>"
+        '<div class="sei-alert warn">Deleting the stock template files can leave '
+        "registration, giving, and login pages without a shell if they still point at "
+        "<span class='sei-code'>" + esc(REG_TEMPLATE) + "</span>, "
+        "<span class='sei-code'>" + esc(GIVING_TEMPLATE) + "</span> / "
+        "<span class='sei-code'>" + esc(GIVING_WORKING_COPY) + "</span>, or "
+        "<span class='sei-code'>" + esc(LOGIN_TEMPLATE) + "</span>. "
+        "Only remove templates when you are sure those pages no longer use them.</div>"
+        '<form method="post" class="sei-form" id="sei-uninstall-form">'
+        '<input type="hidden" name="step" value="uninstall" />'
+        '<input type="hidden" name="action" value="uninstall" />'
+        '<label class="sei-check">'
+        '<input type="checkbox" name="remove_templates" id="sei-remove-templates" value="1" />'
+        "<span>Also remove stock template files "
+        "(<span class='sei-code'>" + esc(REG_TEMPLATE) + "</span>, "
+        "<span class='sei-code'>" + esc(GIVING_TEMPLATE) + "</span>, "
+        "<span class='sei-code'>" + esc(GIVING_WORKING_COPY) + "</span>, "
+        "<span class='sei-code'>" + esc(LOGIN_TEMPLATE) + "</span>)</span>"
+        "</label>"
+        '<div class="sei-actions">'
+        '<button class="btn btn-primary" type="submit">Uninstall Shell Editor</button> '
+        '<a class="btn btn-default" href="?step=welcome">Cancel</a>'
+        "</div></form>"
+    )
+
+def render_uninstall_installer():
+    if not is_developer():
+        return (
+            '<div class="sei-alert err">Uninstall is limited to the Developer role.</div>'
+        )
+    return (
+        '<div class="sei-alert ok">Shell Editor has been uninstalled.</div>'
+        "<p>Do you also want to remove the <span class='sei-code'>"
+        + esc(INSTALLER_NAME) + "</span> script from Special Content?</p>"
+        '<form method="post" class="sei-form" id="sei-uninstall-installer-form">'
+        '<input type="hidden" name="step" value="uninstall_installer" />'
+        '<div class="sei-actions">'
+        '<button class="btn btn-primary" type="submit" name="action" '
+        'value="uninstall_installer">Remove installer</button> '
+        '<button class="btn btn-default" type="submit" name="action" '
+        'value="keep_installer">Keep installer</button>'
+        "</div></form>"
+    )
+
+def render_uninstall_done():
+    return (
+        "<p>Uninstall is complete.</p>"
+        '<div class="sei-actions">'
+        '<a class="btn btn-primary" href="/">Finish</a>'
+        "</div>"
+    )
 
 SCRIPT = r"""
 <script>
@@ -4346,6 +4556,23 @@ SCRIPT = r"""
   function parseSeiJson(txt){
     var m=(txt||'').match(/<!--SEI_JSON-->([\s\S]*?)<!--\/SEI_JSON-->/);
     try { return JSON.parse(m?m[1]:txt); } catch(e){ return null; }
+  }
+  function escHtml(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function showUninstallFinish(notice){
+    var wrap=document.querySelector('.sei-wrap .sei-card')||document.body;
+    var msg=escHtml(notice||'Installer removed.');
+    wrap.innerHTML=
+      '<h1 class="sei-h1">Shell Editor Uninstall</h1>'+
+      '<p class="sei-sub">Remove Shell Editor from this church database.</p>'+
+      '<div class="sei-steps"><span class="sei-step done">1. Uninstall</span>'+
+      '<span class="sei-step done">2. Installer</span>'+
+      '<span class="sei-step on">Done</span></div>'+
+      '<div class="sei-alert ok">'+msg+'</div>'+
+      '<p>Uninstall is complete.</p>'+
+      '<div class="sei-actions"><a class="btn btn-primary" href="/">Finish</a></div>';
   }
   function goStep(step, notice, noticeKind){
     var url=window.location.pathname+'?step='+encodeURIComponent(step||'welcome');
@@ -4377,6 +4604,45 @@ SCRIPT = r"""
         });
       });
   }
+  function deleteSpecialContentTargets(targets){
+    // Same session auth the editor uses for /api/v1 calls.
+    return fetch('/api/v1/SpecialContentFiles',{
+      method:'GET',
+      credentials:'same-origin',
+      headers:{'Accept':'application/json'}
+    }).then(function(r){
+      if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
+      return r.json();
+    }).then(function(files){
+      var byKey={};
+      (files||[]).forEach(function(f){
+        byKey[String(f.Name||'')+'|'+String(f.Type||'')]=f;
+      });
+      var chain=Promise.resolve();
+      var results=[];
+      (targets||[]).forEach(function(t){
+        chain=chain.then(function(){
+          var key=String(t.name||'')+'|'+String(t.type||'');
+          var f=byKey[key];
+          if(!f){
+            results.push(String(t.name||'')+': not found');
+            return;
+          }
+          var url='/api/v1/SpecialContent/'+encodeURIComponent(f.Id)
+            +'?type='+encodeURIComponent(t.type||'');
+          return fetch(url,{
+            method:'DELETE',
+            credentials:'same-origin',
+            headers:{'Accept':'application/json'}
+          }).then(function(r){
+            if(!r.ok) throw new Error('Could not delete '+t.name+' ('+r.status+')');
+            results.push(String(t.name||'')+': deleted');
+          });
+        });
+      });
+      return chain.then(function(){ return results; });
+    });
+  }
   // PyScriptForm only paints model.Form on GET. Submit actions via AJAX, then navigate.
   document.addEventListener('submit', function(ev){
     var form=ev.target;
@@ -4387,6 +4653,14 @@ SCRIPT = r"""
       if(!rid || !rid.value){
         alert('Select a registration form involvement.');
         return;
+      }
+    }
+    if(form.id==='sei-uninstall-form'){
+      var rm=document.getElementById('sei-remove-templates');
+      if(rm && rm.checked){
+        if(!window.confirm(
+          'Remove stock template files? Registration, giving, and login pages that still use those shells will be left without a shell.'
+        )) return;
       }
     }
     if(form.id==='sei-menu-form'){
@@ -4436,6 +4710,23 @@ SCRIPT = r"""
                 +((err&&err.message)||err);
               data.notice_kind='warn';
             });
+        }
+        if(data.delete_targets && data.delete_targets.length){
+          chain=chain.then(function(){
+            return deleteSpecialContentTargets(data.delete_targets);
+          }).catch(function(err){
+            throw new Error('Special Content delete failed: '+((err&&err.message)||err));
+          });
+        }
+        // Remove installer in the browser, then paint Finish (script is gone).
+        if(data.delete_installer){
+          return chain.then(function(){
+            return deleteSpecialContentTargets([
+              {name:'ShellEditorInstaller', type:'PythonScript'}
+            ]);
+          }).then(function(){
+            showUninstallFinish('Installer removed.');
+          });
         }
         return chain.then(function(){
           goStep(data.step||'welcome', data.notice||'', data.notice_kind||'info');
@@ -4629,6 +4920,8 @@ try:
             next_step = "welcome"
             ok = True
             assign_shell = None
+            delete_targets = None
+            delete_installer = False
             if action == "install_files":
                 ok, msg = action_install_files()
                 notice, notice_kind = msg, ("ok" if ok else "err")
@@ -4674,6 +4967,27 @@ try:
                 )
                 notice, notice_kind = msg, ("ok" if ok else "err")
                 next_step = "done" if ok else "menu"
+            elif action == "uninstall":
+                remove_templates = request_val("remove_templates") in (
+                    "1", "true", "on", "yes"
+                )
+                ok, msg, delete_targets = action_uninstall(remove_templates)
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "uninstall_installer" if ok else "uninstall"
+            elif action == "uninstall_installer":
+                if not is_developer():
+                    ok = False
+                    notice, notice_kind = "Uninstall requires the Developer role.", "err"
+                    next_step = "uninstall_installer"
+                else:
+                    ok = True
+                    notice, notice_kind = "Removing installer…", "ok"
+                    next_step = "uninstall_done"
+                    delete_installer = True
+            elif action == "keep_installer":
+                ok = True
+                notice, notice_kind = "Installer kept.", "info"
+                next_step = "uninstall_done"
             else:
                 ok = False
                 notice = "Unknown installer action."
@@ -4687,6 +5001,10 @@ try:
             }
             if assign_shell:
                 payload["assign_shell"] = assign_shell
+            if delete_targets:
+                payload["delete_targets"] = delete_targets
+            if delete_installer:
+                payload["delete_installer"] = True
             emit_json(payload)
     else:
         # GET: render the wizard page.
@@ -4695,7 +5013,11 @@ try:
         notice_kind = request_val("notice_kind") or "info"
         if notice_kind not in ("info", "ok", "warn", "err"):
             notice_kind = "info"
-        model.Title = "Shell Editor Installer"
+        model.Title = (
+            "Shell Editor Uninstall"
+            if next_step in UNINSTALL_STEPS
+            else "Shell Editor Installer"
+        )
         model.Header = ""
         model.Styles = STYLES
         model.Form = render_page(next_step, notice, notice_kind)
