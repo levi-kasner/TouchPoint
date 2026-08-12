@@ -1,0 +1,1491 @@
+#Roles=Admin,Finance
+# InstallVirtuousRaiseImport -- Configure settings and install VirtuousRaiseImport.
+# Open at: /PyScriptForm/InstallVirtuousRaiseImport
+#
+# After editing VirtuousRaiseImport.py locally, regenerate the embedded body with:
+#   python build_installer.py
+
+import base64
+import json
+import traceback
+import zlib
+
+# ========================= CONFIG =========================
+INSTALLER_NAME = "InstallVirtuousRaiseImport"
+IMPORT_SCRIPT_NAME = "VirtuousRaiseImport"
+MORNING_BATCH_NAME = "MorningBatch"
+CALL_LINE = "model.CallScript('VirtuousRaiseImport')"
+CONTENT_KEYWORD = "VirtuousRaise"
+
+SETTING_API_KEY = "Virtuous API Key"
+SETTING_START_DATE = "Virtuous Import Start Date"
+SETTING_FROM_START = "Virtuous Import From Start Date"
+SETTING_ANONYMOUS_ID = "Virtuous Anonymous Giver Id"
+SETTING_SEND_EMAIL = "Virtuous Send Email Notices"
+SETTING_EMAIL_TO = "Virtuous Email Notice People Id"
+SETTING_EMAIL_SENDER = "Virtuous Email Notices Sender Id"
+
+GIFT_URL = "https://prod-api.raisedonors.com/api/Gift/query"
+BUNDLE_TYPE_CODE = "VRDI"
+BUNDLE_TYPE_LOOKUP_URL = "/Lookup/BundleHeaderTypes"
+CONTENT_TYPE_PYTHON = 5  # Special Content TypeID for Python scripts
+
+STEPS = [
+    "welcome", "batch_type", "api_key", "start_date",
+    "anonymous", "email_notice", "install", "done",
+]
+UNINSTALL_STEPS = ["uninstall", "uninstall_installer", "uninstall_done"]
+
+ALL_SETTINGS = [
+    SETTING_API_KEY,
+    SETTING_START_DATE,
+    SETTING_FROM_START,
+    SETTING_ANONYMOUS_ID,
+    SETTING_SEND_EMAIL,
+    SETTING_EMAIL_TO,
+    SETTING_EMAIL_SENDER,
+]
+
+# ==== BEGIN EMBEDDED IMPORT (generated; do not edit) ====
+importBody = zlib.decompress(base64.b64decode(
+    (
+        'eNqtO2t32zay3/srsEpzKG1k2U5Pe/cm6z1rW3aiNn5s7CabTfMBJiETNUUwAGhbzcl/vzMDkAQpSnb3RqeNDWgwGMx7BvBcqwVLuBVWLgSTi0JpS+Mxw5lE'
+        'ZJYz9h389wQ+7FDlxvLcGpi4lnP7q85Y/dljUWptYV5sbxdaJVu8kBPNpRGJypU2k1gttmFu+xUs3P5cCr2MAA3M/CKWF8JamV+HuN5JbUtVGrZ/PmMAgsCw'
+        'ubZTIK8FHwLP3BEuEJAhJC6bwykvVpb2LDtGdrTX8lzlywXAzJI2kS0SKyD2St4KzWYJUSvy5GjBZXaqrIyF6d35AoAYQTEPhktFs+xShfuGS8NV7FyoIhN+'
+        '52A54he6QrFuuaOjptwJhXU+e2yhQCMmHtmwJboxi6IRLE0FRzzhqi9ssF/aVGn5B7dS5YMXbHAguAawAXvGHJoxqVnPZwBKZ0Vuty6XhcClvCgyGROm7d8N'
+        'oFu/dD+ORWFxkRX3drvIuMwH7KvT6ETM2VthVHYrHPNqCQ+N+3nKF2L0wmO3evki2EgLW+qcydwOjdXDNmeC9cCXHWCM0vRzArCyGI5GHpO4RwLZEf2AA/Xs'
+        'sNNQOzOXGhhZsXyo+V1NnpwzGDJpQKK56MFzzDMj/LSfQsIRR0XVJFN3Qg9HcCo2jKwuRQTk7+I/S9DLkfcErGIXK8G42RzOJk1jAugYDBvGKp/L61IDxNWS'
+        '2RTcCzqPLBN61LYrUJE1clg1vlGPXcH6Lme64ug1RFLZUdfaNtHTZ5ajPnt7JJKWcY6+uyrzJBOo54dAPxnr2+kMDbL5BjDDF58n/0IHevE5m4ECeqkOjMhE'
+        'bJlVBdsFS2bo91im1E1ZTA4Iw2uyTsRj2F0qtGDVTl92vkaDCchywe2wTQieEP8nPz5LjqXIiIjoLXr3qZtFKi2/EaHh7+6g8iZ8aQ54fFPN/q1jpU/AA0DA'
+        'uBXJVsGNYXPQkSuEv5N5ou4Ag1NXM60Q7bEffvqxhUGLOZC8HadcXwtcvA4V6a/jk0gOVVYucgPGiS5rD/ybsByiH//4yc29BJ1NxD0qcA62zIxiubIpetJE'
+        'k5qjNraR7bGPlTxmCfimAUYS/Hmu1e8AOTQjHO2DWucWf7t0nhe5zWb5XNEaZCqj9R6XmzmW2liGfqWBesNXpkjZm+F5Ci6hQXUgswyPsJ8kWgCX3shcsF0E'
+        '7/3med83h9Iu12OEEOrO3P3iXKEL6EWI7NABTsRRGmKQ5rnhMfpHZAkAfIL/UVYzks4eSyTwdZiTu5Uj55HGTmTgykReLoQGioYdWXk3jGmFJTfyxW8e7Wf8'
+        'ii949CLafxONcWhuaPQLjiCQqZyG/6HhDdJncPwWxoc8k0BBLhHicD+qThTBrkrzROH0GQKqPAdyZFxanLqEqanI+B1ERhhPj3As0TWDTas5I6KvCOv0sMF6'
+        'DEhlgrPHSOorofQ1Ab2CraPXgE5KGL2ewWiW8BS3n01xgAJQEumevWnwAU8lp9PNThFK3dHviOyX6py/XOAIgnIZ3yxx/AHGb1QpjV/6Jjj2CQRdPNAJHuiE'
+        '62XG8wTHUxobEG1aYsREzCe4z4mMU3nNcxzPaAyMMsoi5pPTALM0Bv8rCjzhyQWBGqNKTWPk8QkkD46kE+TvqbjSXpSnRzS+5cS703cN2lNxx17zRWFSSZI4'
+        'fU2Qd+xnoY3A857+7GdOxL2MkaOnJ37mg9I3OP4Q4IPUMmWHXCtgOG12iMA0O+U37lynyI2zVCKyM9zw7CYDYZEOnqHWnWlxrZAlZ28b1Ociz80yu+VO286R'
+        'e29TdOkz49n8Fjl4oco2CReH9WxNwsW0QQxOCVhuBJ7/EvXgUtyT6C//DYNfLU/h91+Rpe+EXgCTYfiOhhLUz1HzLlCC99yg27R0gvdI5nsBbiuAfv8OJ6WB'
+        'vMFIgkLC3y/VAtbh8AOGGJ+7VTGUrDaK3GRVpVACv4VVDMQFCMEleY6t/+azkinWZYQZ1qnXE/iSAhQbVpGMwMY+zzI0GjFuWPQBPlsnJ1vTaYTpFxzNTGo0'
+        '66sYzOs4K4DVPAezY3OI6poNc4HVBkZ4Bvl0JiG1arC9T0XOBg+UOAPEjJnemF1BZGMYNoGpVGgxbmtkNuXVruhdIQYapsv8JYNFQt9BHoDJIKV5wC1eZpbI'
+        'CoKvGdfIjAXnz+IMbAyyQ6toGSGvqL/O1BXPWCBmN+9x73s2g/CHKOeJVZBlQOK61ZStQ8w79qrkY0RJ7hy/HUZPP2w9XWw9TaJRG20lxofRdjKSTdhpA8e5'
+        'PcrNqxwcsvVuRdWtb6uiqp3gQwriEIGBr+Tw7C9oEGH+X3BtiFVur3Mc4h60LICDDTxoTxFBxUojjWfAIYgUtxDqkk1q6wshNoD0cjBh0bpKzX2i2TWkKwjv'
+        'lOG3HComn5J2iBVQzHTpq5jsTjGBDJ0MbDhYwgeNLkkGgUzk/IGyoa9t4GqGF2220cZdanyNRd+NPW0B/R1ePmCmKBLgJRhpaTdxMdrsQsSisMtt6eS2URzR'
+        'sQATJfMF++yaNElmtcTsWOd4xa4q1rfcJOZvHbMOq1TnPVkDFWJDb/KH0ArS/SSBhbOLs8qtslgtQBMEyyhGX2tepDKGgmCJmX6cakiNM3Xtp2qVWJElzLXJ'
+        '/Xu/vLtn6koc7Tc80N83qY3pw+K5vCHGtOMglWfUPtv6/36aOHhQyiyh4vNAJcvGY40xZkDCLsDPmxtZ1DbipiHXTSTFYeoHgWAgObdCY2+myfRVgXm6otmZ'
+        '2c+XZ3OcBnUthYHJaouqhRNw5UvAxwEWogCOP8Lm0AAJQzTwoz0PpnKwxF1jLeAwiStfAohEmBjqNFAsgKJWyhh1T2UJpjFzKsugOrziNk6BPtQ7j2qNqhFW'
+        '6oL6vtYPbYralQoS3Z5pQV9rVRYI9LGjTcDquOJ83/cepiWOQ6KbVWVrKJNX9JW+THl+po8+l66UI/E46ThdYF/7WnJdRWhDfPIyrUbu96BVdyyAtdg7No9Q'
+        'uivQTdC0RytrrUsGHIypYyUkfRZL1p+Nyoe+4T1mrsU5pk1G3gkV4HNstT7US4douoRiVMawN0fPTvg88KhttCdg3hgBU5EB4w37JkZ7DBkYtlG1vKJkGBJ/'
+        'HYtZMkS1hrQB5xqD/ZwBAzY2k1ZxVe2kaYNwpasUblbtJZOVbhbsP+r0KQEK3Cf+wLjfZFF0uFfCVuc5VvqcLxeQIWMjZVg0vwfJejBL5zEskzcCM2XD2f3/'
+        '/O/zHwbYrh3sH75mh6mIb1Ac9zs//vjT4CVb8IKy1Qx0AOetuhF5Ez0wNQvw97RhgwzQrd2jFC4ktW7HmiKTdhixaPRx51PdnHWLF15P9lqeL4JaGpM/P4Ij'
+        'RKEpRrdwxvr76IDnNzHXSRtmwQ3YOM2/WAeTYJ0GtQfhWgMDHuX+ob0ARoNbzDfhAT8KHsNjWkePuKpB1uKBErSh52w+F5Rqnmd409OGRKnX2NZAfq1rBxOj'
+        'w3DymFwLOyTBdnR4owmOUHcIUY9+U8Lu2oWYBY9ZLq6BkECjsS4INfn7n3YmOztOi7/fHT/fcUMHDt7a6xyVDVoUGY+hbPk+oty2mRj7iaqwaJSc9g912+GM'
+        'tiL2jH5vnbyaqF2cv6ra+gaflhc40y50nYPfBP9qaw4tgDg7qZq7ldxc35pa0niLs/hYdxQ/Nv3XT5+qg7sY7+/BVmGDzuynKnpl3K/oX9I0busVVBasX+H6'
+        'ujV0kZKirIN2bd8aGjJkvdsHvaYf3Fr4/NELnzcLY2mX7DELqZtcL6N2LPLloWWuzVyv+0MWdJvx4Ha+C93e0NPpesFkxjUd44akoH58wnYnYPaQlTAIdhgU'
+        'wvsQJu6t5oxyIwaxnidbd1rCNjFeZ95D4p4rMtyLf71h89pbFLKp1NFlOF2eJUeI7R0iwxAZ3sSMK00e1XQ9D+jCJvg2qdW2V5dWrJJJq1WwZvchKf+YFHpM'
+        '7mnsVHXsdLDZ+odJ0BFyGfCjdwTxeNP127V2pf1a7L8RoiB2cshTJIbzuNQa22P1jqTz6MjdDr8WiZej490Qtgcn5/UC1fcsRw9Py0ZtNM//DJrLO+XRPA/Q'
+        'oD1QVNmIBo0BJwEBLgjWkxY+SAZZBRpC5PU2wOBN5MVmDP9xULDewwcYSAwP0kCOyvMjasnO9ZlS1156gBEiy8iHRS01q5uIfOFyMdJ/BooEBdi8hJgjnPpD'
+        'UppKKMuswBTWh4JK09oGRRtutCofzFBfW8FsKraSsvjGwWxmTsUd1jpUdMySlZhfaDGXePM1cEX+W7r/HDTR2SUS/lvEVIV/dIu4DjJz9uTL7tc6O3cox8zt'
+        'OOotBmJKQv46csVAcqValYAvAU7I8YI1dvN/3LrDzp7Mf2+vevJQsdhdXRv2TVmM7s0hPliiiu/nCTARHPUcDt+kVgjGeA7eXBrqZLqrcbwRXrlRn1D0eYbC'
+        'AD7kmN2xIfq8oCgK+vMNBQ6Hb4vnQiTY7A+qJd/Swk6c5xuqvbrC6+Qxar2CzdidqFHT2wu9ACz4gMAHg1vJMdiAP1Uc6inL7qRNXWNfq7vIhGROWuIfrnYm'
+        'fF1oJ2HBNwjhahVpnTFtA/2uZL7+hYKlwDqhxxTpyvcw3cLltM9OwhcN1CJPJ6FE8JvdQCs7fYj204c6Gx5E2OmIosGo29qgTJq05gHgSvXrhBKcFjAeb6gb'
+        'MyAbCAOkLy9wF8hJuMXd1B1e7TeMx90G9MYIfnTyde9xEc2aDnUT7kMOU12C3cV54wyIPxDTb9pGvFKOV4m4w+dfk0zbNUsz6e62JqdHl9RzupQL8RL3dRJj'
+        'lCCgvsc8E3nCNb1PRK3HSYNpYoUz4cuoen+Et5/IWqTN2yzOAA8BN71b4rFWkAwW/BpUbRtvs0x9rjkpSkPjpssE4EkKwBsdShP6ALbneuWJf3SZo2jDxz7Y'
+        'Qy+Ukb5t5b9Sti6y6v2dGIH7LSk2RxhXrSjP48np6l4h9GmQ17lNOmbkuNTSBCCk5bkx8ECsUjGkAejAvonnPnf4KDzaiubXvifXjZOkPeFbMxCBnYTP1ShQ'
+        '9lWP1VUkxcOqjIG11ZmnVdEQPI1sLteaerNVmLmCpc72g1ZUWKKGS1aeBzVli28hOAIe1wYLsoBzl0P8+SSi9l4FGpidFO5hkwkV2vUrAHfYvSgmnH6pxRQs'
+        'iOdN5YGd3kocx0ASLMzr2strY6tsCLOQKRxNZkOnxPF8gghQt/f91q56af5tY20lNJP6oeNenfj1A4YDH5v26pyzb0GQJK2mYo10uulYVQhUkg9ug7vefROJ'
+        'laJgYKmV6Lt2CHQW5aOuY6pBXg+vkk7L+ty9GfjGKTDdXyLq/rZ9x9Cxi8+qzLE6Aj3pqvp0d6mEGHCpyxanXLDYe9ztQlsIbumau/IwTBK8FQvchxZN3KiF'
+        'DcVI0w9houcXaHi90B5TU0Cgw1rhVvjBAlrmpejNg8jH/ZfOLSCpHez7+LWBkj8bjVsXrrgUeOX1oW9XCp7++4+04FP33UPPW4N65cZ0p29Re6e9KmY2n258'
+        'S/vcJen7sz3mnty2fAN+849K0yymCutVqilFpEmr20zKr1y7c+g5aFjD6LqEoQS24jBeoYrEH95MbsTSDNsPJeo8E7ZqsapiRuNWgjCPrwebp1ab7r73+t5o'
+        '+XWBN+mg+BhVrw6iT2N3s9uzKNwI1xzSQ2N8+oNNchc4HQZ0ME07DDR9y6QKn07x65d4a3QrNj7zcs0sbii57b73ClsYFxDuH3qn0nbTR/i+lhUKLyq/mZvG'
+        'F+zuLTu1fIam9FUpXY426f6pe6kG2Xfu/l4FzoB/KrNk/Ap5QH8f4NgxXEjKFqt3KtRs2Iba13ccwVNPah30/q77wr/n4q0F333xD8ztTFfv+Ndi6vw9iJOK'
+        'Y8Kad1N+s3HfNt2qcoD9zH9aVcYpScyoucWHwfhXVPQmGr85J1nuJwu5+kcwLUH0VKHdvzxBnWt5ObrRHvrkz4vGy87dUszhHwH8eWoG7CmrmnMBW1oW3L6Y'
+        'H1xW7fIKdcrpQeFk0Gk10hupkC6PgX48Y4Pf8t9y/CuilaeCXc30J3E2N/AKik9JNzFiYfCGdXCkNfq6Ms+pDVPT7g0YZF9mAjmBtAAv6i4dXSyZ69FjaCKG'
+        'lhofXeCS/wOD11pQ'
+    )
+)).decode('utf-8')
+# ==== END EMBEDDED IMPORT ====
+
+# ========================= HELPERS =========================
+def esc(s):
+    if s is None:
+        return ""
+    s = str(s)
+    return (s.replace("&", "&amp;").replace("<", "&lt;")
+             .replace(">", "&gt;").replace('"', "&quot;"))
+
+def get_setting(key):
+    try:
+        return str(model.GetSetting(key) or "").strip()
+    except Exception:
+        try:
+            return str(model.Setting(key) or "").strip()
+        except Exception:
+            return ""
+
+def set_setting(key, value):
+    model.SetSetting(key, "" if value is None else str(value))
+
+def request_val(key, default=""):
+    if model.DataHas(key):
+        return str(model.Dictionary(key) or "").strip()
+    return default
+
+def http_method():
+    try:
+        return str(model.HttpMethod or "get").lower()
+    except Exception:
+        return "get"
+
+def emit_json(payload):
+    """Return JSON for PyScriptForm AJAX POSTs (model.Form is GET-only)."""
+    body = "<!--VRI_JSON-->" + json.dumps(payload) + "<!--/VRI_JSON-->"
+    model.Header = ""
+    model.Styles = ""
+    model.Script = ""
+    model.Form = body
+    try:
+        print(body)
+    except Exception:
+        pass
+
+def python_exists(name):
+    try:
+        return bool(model.PythonContent(name))
+    except Exception:
+        return False
+
+def content_rows_by_name(names):
+    """Read-only lookup of Special Content Id/TypeID by name."""
+    clean = []
+    for n in names or []:
+        n = str(n or "").strip()
+        if n and n not in clean:
+            clean.append(n)
+    if not clean:
+        return {}
+    in_list = ",".join("'" + n.replace("'", "''") + "'" for n in clean)
+    sql = (
+        "SELECT c.Id, c.Name, c.TypeID "
+        "FROM dbo.Content c "
+        "WHERE c.Name IN (" + in_list + ")"
+    )
+    found = {}
+    try:
+        for row in q.QuerySql(sql):
+            name = str(getattr(row, "Name", "") or "")
+            try:
+                cid = int(getattr(row, "Id", 0) or 0)
+            except Exception:
+                cid = 0
+            tid = getattr(row, "TypeID", None)
+            try:
+                tid = int(tid) if tid is not None and str(tid) != "" else None
+            except Exception:
+                tid = None
+            if name and cid > 0:
+                found[name] = {"id": cid, "typeId": tid}
+    except Exception:
+        found = {}
+    return found
+
+def installer_name_from_path(path):
+    """Extract Special Content name from a /PyScriptForm/<Name> path."""
+    path = str(path or "").strip()
+    if not path:
+        return ""
+    # Drop query/fragment if present.
+    if "?" in path:
+        path = path.split("?", 1)[0]
+    if "#" in path:
+        path = path.split("#", 1)[0]
+    parts = [p for p in path.replace("\\", "/").split("/") if p]
+    for i, part in enumerate(parts):
+        if part.lower() == "pyscriptform" and i + 1 < len(parts):
+            return parts[i + 1]
+    if parts:
+        return parts[-1]
+    return ""
+
+def resolve_installer_name():
+    """Prefer the live script name so renamed installer copies still clean up."""
+    # TouchPoint sets model.Data.pyscript to the Python Special Content name.
+    try:
+        if model.DataHas("pyscript"):
+            name = str(model.Dictionary("pyscript") or "").strip()
+            if name:
+                return name
+    except Exception:
+        pass
+    try:
+        name = str(getattr(model.Data, "pyscript", "") or "").strip()
+        if name:
+            return name
+    except Exception:
+        pass
+
+    # Fall back to request URL / referrer path when available.
+    for attr in ("Url", "RawUrl", "RequestUrl", "PathAndQuery", "Path"):
+        try:
+            name = installer_name_from_path(getattr(model, attr, ""))
+            if name:
+                return name
+        except Exception:
+            pass
+
+    # Client can pass the pathname segment on finish POSTs.
+    posted = request_val("installer_name")
+    if posted:
+        return posted
+
+    return INSTALLER_NAME
+
+def installer_delete_target():
+    name = resolve_installer_name()
+    target = {
+        "name": name,
+        "typeId": CONTENT_TYPE_PYTHON,
+        "required": True,
+    }
+    rows = content_rows_by_name([name])
+    info = rows.get(name)
+    if info:
+        target["id"] = info["id"]
+    return target
+
+def morning_batch_wired():
+    try:
+        existing = model.Content(MORNING_BATCH_NAME) or ""
+    except Exception:
+        existing = ""
+    return CALL_LINE in existing
+
+def parse_people_id(raw):
+    try:
+        pid = int(str(raw or "").strip())
+        return pid if pid > 0 else 0
+    except Exception:
+        return 0
+
+def person_label(pid):
+    pid = parse_people_id(pid)
+    if not pid:
+        return ""
+    try:
+        rows = q.QuerySql(
+            "select top 1 Name from dbo.People where PeopleId = {0}".format(pid)
+        )
+        for row in rows:
+            name = str(getattr(row, "Name", "") or "").strip()
+            if name:
+                return name + " (#" + str(pid) + ")"
+    except Exception:
+        pass
+    return "#" + str(pid)
+
+def person_exists(pid):
+    pid = parse_people_id(pid)
+    if not pid:
+        return False
+    try:
+        return q.QuerySqlInt(
+            "select count(*) from dbo.People where PeopleId = {0}".format(pid)
+        ) > 0
+    except Exception:
+        return False
+
+def person_has_email(pid):
+    """True when the person exists and has a non-empty primary EmailAddress."""
+    pid = parse_people_id(pid)
+    if not pid:
+        return False
+    try:
+        return q.QuerySqlInt(
+            "select count(*) from dbo.People "
+            "where PeopleId = {0} "
+            "and nullif(ltrim(rtrim(EmailAddress)), '') is not null".format(pid)
+        ) > 0
+    except Exception:
+        return False
+
+def find_bundle_header_type():
+    """Return {id, code, description} for Code=VRDI, or None."""
+    sql = (
+        "select top 1 Id, Code, Description "
+        "from lookup.BundleHeaderTypes "
+        "where Code = '{0}'".format(BUNDLE_TYPE_CODE.replace("'", "''"))
+    )
+    try:
+        for row in q.QuerySql(sql):
+            return {
+                "id": int(row.Id),
+                "code": str(getattr(row, "Code", "") or ""),
+                "description": str(getattr(row, "Description", "") or ""),
+            }
+    except Exception:
+        return None
+    return None
+
+def send_email_notices_enabled():
+    return get_setting(SETTING_SEND_EMAIL).lower() in ("true", "1", "yes")
+
+def email_settings_ok():
+    # Enabled => both people required with primary email. Disabled/empty => ok.
+    if not send_email_notices_enabled():
+        return True
+    return (
+        person_has_email(get_setting(SETTING_EMAIL_TO))
+        and person_has_email(get_setting(SETTING_EMAIL_SENDER))
+    )
+
+def settings_complete():
+    # From-start may be empty after the first successful import run; that is fine.
+    if not find_bundle_header_type():
+        return False
+    if not get_setting(SETTING_API_KEY):
+        return False
+    if not get_setting(SETTING_START_DATE):
+        return False
+    if not person_exists(get_setting(SETTING_ANONYMOUS_ID)):
+        return False
+    return email_settings_ok()
+
+def resolve_step():
+    focus = ""
+    if model.DataHas("focus"):
+        focus = str(model.Dictionary("focus") or "").strip().lower()
+    step = request_val("step").lower()
+    if focus == "uninstall" or step in UNINSTALL_STEPS:
+        if focus == "uninstall" and step not in UNINSTALL_STEPS:
+            return "uninstall"
+        if step in UNINSTALL_STEPS:
+            return step
+        return "uninstall"
+    if step in STEPS:
+        return step
+    if not find_bundle_header_type():
+        return "welcome" if not get_setting(SETTING_API_KEY) else "batch_type"
+    if not get_setting(SETTING_API_KEY):
+        return "welcome"
+    if not get_setting(SETTING_START_DATE):
+        return "start_date"
+    if not person_exists(get_setting(SETTING_ANONYMOUS_ID)):
+        return "anonymous"
+    if send_email_notices_enabled() and not email_settings_ok():
+        return "email_notice"
+    if not (python_exists(IMPORT_SCRIPT_NAME) and morning_batch_wired()):
+        return "install"
+    return "done"
+
+# ========================= ACTIONS =========================
+def verify_api_key(api_key):
+    """POST a tiny Gift/query using the provided key; require a gift-query-shaped JSON body."""
+    headers = {
+        "Authorization": "Bearer " + api_key,
+        "Content-Type": "application/json",
+        "Accept": "text/plain",
+    }
+    # Far-future Create Date keeps the result empty while still exercising auth + query parsing.
+    body = {
+        "take": 1,
+        "skip": 0,
+        "sortBy": "createdate",
+        "descending": True,
+        "queryType": 3,
+        "selectedColumns": ["Id", "Date", "Amount", "Status"],
+        "groups": [{
+            "conditions": [{
+                "parameter": "Create Date",
+                "operator": "GreaterThanOrEqual",
+                "value": "2099-01-01",
+            }]
+        }],
+    }
+    try:
+        raw = model.RestPostJson(GIFT_URL, headers, body)
+    except Exception as e:
+        return False, "Could not reach the Raise API: {0}".format(e)
+
+    if raw is None or str(raw).strip() == "":
+        return False, "Raise API returned an empty response. Check the key and try again."
+
+    try:
+        parsed = json.loads(str(raw))
+    except Exception:
+        snippet = str(raw).replace("\r", " ").replace("\n", " ").strip()
+        if len(snippet) > 160:
+            snippet = snippet[:160] + "…"
+        return False, "Raise API did not return JSON. Response starts with: {0}".format(snippet)
+
+    if not isinstance(parsed, dict):
+        return False, "Raise API returned an unexpected response shape."
+
+    keys = dict((str(k).lower(), k) for k in parsed.keys())
+    if "items" in keys or "total" in keys:
+        return True, "API key verified."
+
+    err = (
+        parsed.get("message")
+        or parsed.get("Message")
+        or parsed.get("error")
+        or parsed.get("Error")
+        or parsed.get("title")
+        or parsed.get("Title")
+    )
+    if err:
+        return False, "Raise API rejected the key: {0}".format(err)
+    return False, "Raise API response did not look like a gift query result."
+
+def action_save_api_key(api_key):
+    api_key = (api_key or "").strip()
+    if not api_key:
+        return False, "Enter the Virtuous / Raise API key."
+    ok, msg = verify_api_key(api_key)
+    if not ok:
+        return False, msg
+    set_setting(SETTING_API_KEY, api_key)
+    return True, msg
+
+def action_save_start_date(start_date):
+    start_date = (start_date or "").strip()
+    if not start_date:
+        return False, "Enter the Virtuous Import Start Date."
+    parsed = model.ParseDate(start_date)
+    if parsed is None:
+        return False, 'Could not parse "{0}" as a date.'.format(start_date)
+    normalized = parsed.ToString("yyyy-MM-dd")
+    set_setting(SETTING_START_DATE, normalized)
+    # Always reach back to the start date on the first import run after install.
+    set_setting(SETTING_FROM_START, "true")
+    return True, "Start date saved. First import will reach back to {0}.".format(normalized)
+
+def action_save_anonymous(people_id):
+    pid = parse_people_id(people_id)
+    if not pid:
+        return False, "Select a people record for anonymous gifts."
+    if not person_exists(pid):
+        return False, "PeopleId {0} was not found.".format(pid)
+    set_setting(SETTING_ANONYMOUS_ID, str(pid))
+    return True, "Anonymous giver set to {0}.".format(person_label(pid))
+
+def action_save_email_notice(send_notices, to_people_id, from_people_id):
+    enabled = str(send_notices or "").strip().lower() in ("1", "true", "yes", "on")
+    if not enabled:
+        set_setting(SETTING_SEND_EMAIL, "")
+        set_setting(SETTING_EMAIL_TO, "")
+        set_setting(SETTING_EMAIL_SENDER, "")
+        return True, "Email notices disabled."
+
+    to_pid = parse_people_id(to_people_id)
+    from_pid = parse_people_id(from_people_id)
+    if not to_pid:
+        return False, "Select who should receive success/failure email notices."
+    if not from_pid:
+        return False, "Select the sender (from) people record for email notices."
+    if not person_exists(to_pid):
+        return False, "Recipient PeopleId {0} was not found.".format(to_pid)
+    if not person_exists(from_pid):
+        return False, "Sender PeopleId {0} was not found.".format(from_pid)
+    if not person_has_email(to_pid):
+        return False, (
+            "{0} has no primary email address. "
+            "Choose a recipient with an email.".format(person_label(to_pid))
+        )
+    if not person_has_email(from_pid):
+        return False, (
+            "{0} has no primary email address. "
+            "Choose a sender with an email.".format(person_label(from_pid))
+        )
+
+    set_setting(SETTING_SEND_EMAIL, "true")
+    set_setting(SETTING_EMAIL_TO, str(to_pid))
+    set_setting(SETTING_EMAIL_SENDER, str(from_pid))
+    return True, "Email notices enabled (to {0}, from {1}).".format(
+        person_label(to_pid), person_label(from_pid)
+    )
+
+def action_check_person_email(people_id):
+    pid = parse_people_id(people_id)
+    if not pid:
+        return False, "Select a people record."
+    if not person_exists(pid):
+        return False, "PeopleId {0} was not found.".format(pid)
+    if not person_has_email(pid):
+        return False, (
+            "{0} has no primary email address and cannot be used for notices.".format(
+                person_label(pid)
+            )
+        )
+    return True, person_label(pid)
+
+def action_install():
+    if not find_bundle_header_type():
+        return False, (
+            'A batch type (bundle header type) with Code "{0}" is required '
+            "before installing.".format(BUNDLE_TYPE_CODE)
+        )
+    if not settings_complete():
+        return False, "Complete every settings step before installing."
+    if not (importBody or "").strip():
+        return False, ("Installer is missing the embedded import script. "
+                       "Run python build_installer.py locally, then re-upload.")
+    model.WriteContentPython(IMPORT_SCRIPT_NAME, importBody, CONTENT_KEYWORD)
+    try:
+        existing = model.Content(MORNING_BATCH_NAME)
+    except Exception:
+        existing = None
+    if existing is None:
+        existing = ""
+    existing = str(existing)
+    if CALL_LINE not in existing:
+        if existing.strip() == "":
+            new_body = CALL_LINE + "\n"
+        else:
+            new_body = existing.rstrip() + "\n" + CALL_LINE + "\n"
+        model.WriteContentPython(MORNING_BATCH_NAME, new_body)
+    return True, "VirtuousRaiseImport installed and MorningBatch updated."
+
+def import_delete_target():
+    target = {
+        "name": IMPORT_SCRIPT_NAME,
+        "typeId": CONTENT_TYPE_PYTHON,
+        "required": True,
+    }
+    rows = content_rows_by_name([IMPORT_SCRIPT_NAME])
+    info = rows.get(IMPORT_SCRIPT_NAME)
+    if info:
+        target["id"] = info["id"]
+    return target
+
+def clear_integration_settings():
+    for key in ALL_SETTINGS:
+        try:
+            set_setting(key, "")
+        except Exception:
+            pass
+
+def remove_morning_batch_call():
+    try:
+        existing = model.Content(MORNING_BATCH_NAME)
+    except Exception:
+        existing = None
+    if existing is None:
+        return False
+    existing = str(existing)
+    if CALL_LINE not in existing:
+        return False
+    lines = []
+    for line in existing.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if line.strip() == CALL_LINE.strip():
+            continue
+        lines.append(line)
+    # Trim trailing blank lines introduced by removal, keep a final newline.
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    new_body = "\n".join(lines)
+    if new_body:
+        new_body = new_body + "\n"
+    model.WriteContentPython(MORNING_BATCH_NAME, new_body)
+    return True
+
+def action_uninstall():
+    clear_integration_settings()
+    removed_batch = remove_morning_batch_call()
+    delete_targets = []
+    if python_exists(IMPORT_SCRIPT_NAME):
+        delete_targets.append(import_delete_target())
+    msg = "Virtuous Raise import settings cleared"
+    if removed_batch:
+        msg += ", MorningBatch call removed"
+    if delete_targets:
+        msg += ", import script will be deleted"
+    msg += "."
+    return True, msg, delete_targets
+
+# ========================= UI =========================
+STYLES = """
+<style>
+.vri-wrap{max-width:820px;margin:24px auto;padding:0 16px 40px;font-family:Segoe UI,Arial,sans-serif;color:#222;}
+.vri-card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:22px 22px 18px;box-shadow:0 2px 10px rgba(0,0,0,.04);}
+.vri-h1{margin:0 0 6px;font-size:26px;}
+.vri-sub{margin:0 0 18px;color:#666;line-height:1.45;}
+.vri-steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;}
+.vri-step{font-size:12px;padding:4px 8px;border-radius:999px;background:#f1f1f1;color:#666;}
+.vri-step.on{background:#333;color:#fff;}
+.vri-step.done{background:#e7f6ec;color:#1d6b3a;}
+.vri-alert{padding:12px 14px;border-radius:8px;margin:0 0 16px;line-height:1.45;font-size:13px;}
+.vri-alert.warn{background:#fff8e1;border:1px solid #f0c36d;color:#6a4b00;}
+.vri-alert.info{background:#eef6ff;border:1px solid #b5d0f0;color:#1e3a5f;}
+.vri-alert.ok{background:#e7f6ec;border:1px solid #9fd5b0;color:#1d6b3a;}
+.vri-alert.err{background:#fdecea;border:1px solid #f0b4b0;color:#8a1f1b;}
+.vri-label{display:block;font-weight:600;margin:0 0 6px;font-size:13px;}
+.vri-help{font-size:12px;color:#666;margin:6px 0 0;line-height:1.4;}
+.vri-row{margin:0 0 16px;}
+.vri-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;}
+.vri-input,.vri-search{width:100%;height:36px;padding:0 10px;box-sizing:border-box;}
+.vri-code{font-family:Consolas,monospace;font-size:12px;background:#f5f5f5;padding:1px 5px;border-radius:4px;}
+.vri-list{margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.45;}
+.vri-summary{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55;}
+.vri-summary li{margin:0 0 8px;padding:10px 12px;border:1px solid #eee;border-radius:8px;background:#fafafa;}
+.vri-radio{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;margin:8px 0;}
+.vri-radio input{margin-top:3px;}
+.vri-check{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;margin:10px 0;}
+.vri-check input{margin-top:3px;}
+.vri-selected{font-size:12px;color:#1d6b3a;margin:0 0 8px;display:none;}
+.vri-selected.on{display:block;}
+.vri-ac{border:1px solid #ddd;border-radius:8px;max-height:240px;overflow:auto;background:#fff;}
+.vri-ac[hidden]{display:none !important;}
+.vri-ac-item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f0f0f0;background:#fff;padding:10px 12px;font-size:13px;cursor:pointer;}
+.vri-ac-item:last-child{border-bottom:0;}
+.vri-ac-item:hover,.vri-ac-item:focus{background:#f5f8ff;outline:none;}
+.vri-ac-meta{display:block;font-size:11px;color:#777;margin-top:2px;}
+.vri-ac-empty,.vri-ac-status{padding:12px;font-size:12px;color:#666;}
+.vri-alert-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.vri-dl{margin:8px 0 0;display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:13px;}
+.vri-dl dt{font-weight:600;margin:0;color:inherit;}
+.vri-dl dd{margin:0;}
+</style>
+"""
+
+def step_pills(current):
+    labels = {
+        "welcome": "1. Welcome",
+        "batch_type": "2. Batch Type",
+        "api_key": "3. API Key",
+        "start_date": "4. Start Date",
+        "anonymous": "5. Anonymous Giver",
+        "email_notice": "6. Email Notices",
+        "install": "7. Install",
+        "done": "Done",
+    }
+    html = ['<div class="vri-steps">']
+    seen = True
+    for s in STEPS:
+        cls = "vri-step"
+        if s == current:
+            cls += " on"
+            seen = False
+        elif seen:
+            cls += " done"
+        html.append('<span class="' + cls + '">' + esc(labels[s]) + "</span>")
+    html.append("</div>")
+    return "".join(html)
+
+def uninstall_step_pills(current):
+    labels = {
+        "uninstall": "1. Uninstall",
+        "uninstall_installer": "2. Installer",
+        "uninstall_done": "Done",
+    }
+    html = ['<div class="vri-steps">']
+    seen = True
+    for s in UNINSTALL_STEPS:
+        cls = "vri-step"
+        if s == current:
+            cls += " on"
+            seen = False
+        elif seen:
+            cls += " done"
+        html.append('<span class="' + cls + '">' + esc(labels[s]) + "</span>")
+    html.append("</div>")
+    return "".join(html)
+
+def render_welcome():
+    return (
+        "<p>This installer will:</p>"
+        '<ul class="vri-list">'
+        "<li>Confirm a batch type (bundle header type) with Code "
+        '<span class="vri-code">' + esc(BUNDLE_TYPE_CODE) + "</span> exists</li>"
+        "<li>Collect the Virtuous / Raise API key</li>"
+        "<li>Set the permanent import start-date floor "
+        "(first run automatically reaches back to that date)</li>"
+        "<li>Choose the people record used for anonymous gifts</li>"
+        "<li>Optionally enable success/failure email notices and choose to/from people</li>"
+        "<li>Install <span class='vri-code'>VirtuousRaiseImport</span> and wire it into "
+        "<span class='vri-code'>MorningBatch</span></li>"
+        "</ul>"
+        '<div class="vri-alert info">This integration requires a batch type '
+        "(internally called a bundle header type) with Code "
+        '<span class="vri-code">' + esc(BUNDLE_TYPE_CODE) + "</span>. "
+        "Every setting is also required during installation. "
+        "You can re-open this installer later to change values.</div>"
+        '<div class="vri-actions">'
+        '<a class="btn btn-primary" href="?step=batch_type">Start installation</a>'
+        "</div>"
+    )
+
+def render_batch_type():
+    row = find_bundle_header_type()
+    intro = (
+        "<p>The import creates contribution batches using the batch type "
+        "(bundle header type) whose Code is "
+        '<span class="vri-code">' + esc(BUNDLE_TYPE_CODE) + "</span>.</p>"
+    )
+    if row:
+        return (
+            intro
+            + '<div class="vri-alert ok">'
+            "<strong>Batch type found.</strong>"
+            '<dl class="vri-dl">'
+            "<dt>ID</dt><dd>" + esc(str(row["id"])) + "</dd>"
+            "<dt>Code</dt><dd><span class='vri-code'>" + esc(row["code"]) + "</span></dd>"
+            "<dt>Description</dt><dd>" + esc(row["description"] or "(none)") + "</dd>"
+            "</dl>"
+            "</div>"
+            '<div class="vri-actions">'
+            '<a class="btn btn-primary" href="?step=api_key">Next</a>'
+            "</div>"
+        )
+    return (
+        intro
+        + '<div class="vri-alert warn">'
+        "<strong>No batch type with Code "
+        '<span class="vri-code">' + esc(BUNDLE_TYPE_CODE) + "</span> was found.</strong>"
+        "<p style='margin:8px 0 0'>Create one in Lookup Codes, then refresh this step.</p>"
+        '<div class="vri-alert-actions">'
+        '<a class="btn btn-default" href="' + esc(BUNDLE_TYPE_LOOKUP_URL)
+        + '" target="_blank" rel="noopener">Open Bundle Header Types</a> '
+        '<a class="btn btn-default" href="?step=batch_type">Refresh</a>'
+        "</div>"
+        "</div>"
+    )
+
+def render_api_key():
+    cur = get_setting(SETTING_API_KEY)
+    return (
+        "<p>Enter the Raise Donors API key used to import gifts.</p>"
+        '<div class="vri-alert info">The installer will verify this key with Raise '
+        "before saving it.</div>"
+        '<form method="post" class="vri-form" id="vri-api-form">'
+        '<input type="hidden" name="step" value="api_key" />'
+        '<input type="hidden" name="action" value="save_api_key" />'
+        '<div class="vri-row">'
+        '<label class="vri-label" for="vri-api-key">'
+        + esc(SETTING_API_KEY) + "</label>"
+        '<input class="vri-input" id="vri-api-key" name="api_key" type="password" '
+        'required autocomplete="off" value="' + esc(cur) + '" />'
+        "</div>"
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Verify and continue</button>'
+        "</div></form>"
+    )
+
+def render_start_date():
+    cur_date = get_setting(SETTING_START_DATE)
+    return (
+        "<p>Choose how far back the import should ever look for gifts.</p>"
+        '<div class="vri-alert info">The first import will reach back to this date. '
+        "Later runs use the normal lookback windows and will not go earlier than this "
+        "date.</div>"
+        '<form method="post" class="vri-form" id="vri-start-form">'
+        '<input type="hidden" name="step" value="start_date" />'
+        '<input type="hidden" name="action" value="save_start_date" />'
+        '<div class="vri-row">'
+        '<label class="vri-label" for="vri-start-date">'
+        + esc(SETTING_START_DATE) + "</label>"
+        '<input class="vri-input" id="vri-start-date" name="start_date" type="date" '
+        'required value="' + esc(cur_date) + '" />'
+        "</div>"
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Save and continue</button>'
+        "</div></form>"
+    )
+
+def render_people_picker(setting_name, field_name, field_label, require_email=False):
+    cur = get_setting(setting_name)
+    if cur and require_email and not person_has_email(cur):
+        # Keep the setting, but force a fresh pick so invalid people are not re-saved blindly.
+        cur = ""
+    label = person_label(cur) if cur else ""
+    selected_cls = "vri-selected on vri-people-selected" if label else "vri-selected vri-people-selected"
+    selected_text = ("Selected: " + esc(label)) if label else ""
+    require_attr = ' data-require-email="1"' if require_email else ""
+    return (
+        '<div class="vri-row vri-people-picker"' + require_attr + ">"
+        '<label class="vri-label">' + esc(field_label) + "</label>"
+        '<input type="hidden" name="' + esc(field_name)
+        + '" class="vri-people-id" value="' + esc(cur) + '" />'
+        '<input class="vri-search vri-people-search" type="search" '
+        'placeholder="Search by name, email, or phone…" autocomplete="off" />'
+        '<div class="' + selected_cls + '">' + selected_text + "</div>"
+        '<div class="vri-ac vri-people-results" hidden></div>'
+        "</div>"
+    )
+
+def render_people_step(step, action, setting_name, intro_html, field_label, required_msg):
+    return (
+        intro_html
+        + '<form method="post" class="vri-form vri-people-form" '
+        'data-required-msg="' + esc(required_msg) + '">'
+        '<input type="hidden" name="step" value="' + esc(step) + '" />'
+        '<input type="hidden" name="action" value="' + esc(action) + '" />'
+        + render_people_picker(setting_name, "people_id", field_label)
+        + '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Save and continue</button>'
+        "</div></form>"
+    )
+
+def render_anonymous():
+    intro = (
+        "<p>Choose the TouchPoint people record to attribute anonymous Raise gifts to.</p>"
+    )
+    return render_people_step(
+        "anonymous",
+        "save_anonymous",
+        SETTING_ANONYMOUS_ID,
+        intro,
+        "Anonymous giver",
+        "Select a people record for anonymous gifts.",
+    )
+
+def render_email_notice():
+    enabled = send_email_notices_enabled()
+    people_style = "" if enabled else " display:none;"
+    return (
+        "<p>Optionally send success and failure emails when the Raise import runs.</p>"
+        '<form method="post" class="vri-form" id="vri-email-form">'
+        '<input type="hidden" name="step" value="email_notice" />'
+        '<input type="hidden" name="action" value="save_email_notice" />'
+        '<label class="vri-check">'
+        '<input type="checkbox" name="send_notices" id="vri-send-notices" value="1"'
+        + (" checked" if enabled else "") + " />"
+        "<span>Send success and failure email notices</span>"
+        "</label>"
+        '<div id="vri-email-people" style="' + people_style + '">'
+        + render_people_picker(
+            SETTING_EMAIL_TO, "to_people_id", "Recipient (to)", require_email=True
+        )
+        + render_people_picker(
+            SETTING_EMAIL_SENDER, "from_people_id", "Sender (from)", require_email=True
+        )
+        + "</div>"
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Save and continue</button>'
+        "</div></form>"
+    )
+
+def email_summary_lines():
+    if send_email_notices_enabled():
+        return (
+            "<li><strong>" + esc(SETTING_SEND_EMAIL) + ":</strong> true</li>"
+            "<li><strong>" + esc(SETTING_EMAIL_TO) + ":</strong> "
+            + esc(person_label(get_setting(SETTING_EMAIL_TO)) or "(missing)") + "</li>"
+            "<li><strong>" + esc(SETTING_EMAIL_SENDER) + ":</strong> "
+            + esc(person_label(get_setting(SETTING_EMAIL_SENDER)) or "(missing)")
+            + "</li>"
+        )
+    return (
+        "<li><strong>" + esc(SETTING_SEND_EMAIL) + ":</strong> off</li>"
+        "<li><strong>" + esc(SETTING_EMAIL_TO) + ":</strong> (empty)</li>"
+        "<li><strong>" + esc(SETTING_EMAIL_SENDER) + ":</strong> (empty)</li>"
+    )
+
+def render_install():
+    anon = get_setting(SETTING_ANONYMOUS_ID)
+    api_set = "set" if get_setting(SETTING_API_KEY) else "missing"
+    bht = find_bundle_header_type()
+    if bht:
+        batch_summary = (
+            "#{0} / {1} / {2}".format(
+                bht["id"], bht["code"], bht["description"] or "(no description)"
+            )
+        )
+    else:
+        batch_summary = "missing (Code {0})".format(BUNDLE_TYPE_CODE)
+    return (
+        "<p>Review the configuration, then install the import script.</p>"
+        '<ul class="vri-summary">'
+        "<li><strong>Batch type:</strong> " + esc(batch_summary) + "</li>"
+        "<li><strong>" + esc(SETTING_API_KEY) + ":</strong> " + esc(api_set) + "</li>"
+        "<li><strong>" + esc(SETTING_START_DATE) + ":</strong> "
+        + esc(get_setting(SETTING_START_DATE) or "(missing)") + "</li>"
+        "<li><strong>" + esc(SETTING_ANONYMOUS_ID) + ":</strong> "
+        + esc(person_label(anon) or "(missing)") + "</li>"
+        + email_summary_lines()
+        + "</ul>"
+        '<form method="post" class="vri-form" id="vri-install-form">'
+        '<input type="hidden" name="step" value="install" />'
+        '<input type="hidden" name="action" value="install" />'
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Install / update import</button>'
+        "</div></form>"
+    )
+
+def render_done():
+    anon = get_setting(SETTING_ANONYMOUS_ID)
+    bht = find_bundle_header_type()
+    if bht:
+        batch_summary = "#{0} / {1} / {2}".format(
+            bht["id"], bht["code"], bht["description"] or "(no description)"
+        )
+    else:
+        batch_summary = "missing (Code {0})".format(BUNDLE_TYPE_CODE)
+    return (
+        '<div class="vri-alert ok">Virtuous Raise import is installed.</div>'
+        '<ul class="vri-summary">'
+        "<li><strong>Import script:</strong> "
+        '<span class="vri-code">' + esc(IMPORT_SCRIPT_NAME) + "</span></li>"
+        "<li><strong>Morning batch:</strong> "
+        + ("wired" if morning_batch_wired() else "not wired") + "</li>"
+        "<li><strong>Batch type:</strong> " + esc(batch_summary) + "</li>"
+        "<li><strong>Anonymous giver:</strong> "
+        + esc(person_label(anon) or "(not set)") + "</li>"
+        + email_summary_lines()
+        + "<li><strong>Start date floor:</strong> "
+        + esc(get_setting(SETTING_START_DATE) or "(not set)") + "</li>"
+        "</ul>"
+        '<div class="vri-actions">'
+        '<a class="btn btn-primary" href="/">Finish</a> '
+        '<a class="btn btn-default" href="?step=batch_type">Check batch type</a> '
+        '<a class="btn btn-default" href="?step=api_key">Edit settings</a> '
+        '<a class="btn btn-default" href="?step=install">Re-install script</a>'
+        "</div>"
+        '<div class="vri-actions" style="margin-top:20px">'
+        '<a class="btn btn-default" href="?focus=uninstall">Uninstall Virtuous Raise Import</a>'
+        "</div>"
+    )
+
+def render_uninstall():
+    return (
+        "<p>This removes the Virtuous Raise import script, clears its settings, "
+        "and removes its call from MorningBatch.</p>"
+        '<div class="vri-alert warn">Contribution history already imported is not '
+        "deleted. Only the integration configuration and scheduled import script "
+        "are removed.</div>"
+        '<form method="post" class="vri-form" id="vri-uninstall-form">'
+        '<input type="hidden" name="step" value="uninstall" />'
+        '<input type="hidden" name="action" value="uninstall" />'
+        '<input type="hidden" name="installer_name" id="vri-installer-name" value="'
+        + esc(resolve_installer_name()) + '" />'
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Uninstall</button> '
+        '<a class="btn btn-default" href="?step=done">Cancel</a>'
+        "</div></form>"
+    )
+
+def render_uninstall_installer():
+    name = resolve_installer_name()
+    return (
+        '<div class="vri-alert ok">Virtuous Raise import has been uninstalled.</div>'
+        "<p>Do you also want to remove the installer script "
+        '(<span class="vri-code">' + esc(name) + "</span>)?</p>"
+        '<form method="post" class="vri-form" id="vri-uninstall-installer-form">'
+        '<input type="hidden" name="step" value="uninstall_installer" />'
+        '<input type="hidden" name="installer_name" id="vri-installer-name" value="'
+        + esc(name) + '" />'
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit" name="action" '
+        'value="uninstall_installer">Remove installer</button> '
+        '<button class="btn btn-default" type="submit" name="action" '
+        'value="keep_installer">Keep installer</button>'
+        "</div></form>"
+    )
+
+def render_uninstall_done():
+    return (
+        "<p>Uninstall is complete.</p>"
+        '<div class="vri-actions">'
+        '<a class="btn btn-primary" href="/">Finish</a>'
+        "</div>"
+    )
+
+def render_page(step, notice=None, notice_kind="info"):
+    uninstalling = step in UNINSTALL_STEPS
+    if step == "welcome":
+        body = render_welcome()
+    elif step == "batch_type":
+        body = render_batch_type()
+    elif step == "api_key":
+        body = render_api_key()
+    elif step == "start_date":
+        body = render_start_date()
+    elif step == "anonymous":
+        body = render_anonymous()
+    elif step == "email_notice":
+        body = render_email_notice()
+    elif step == "install":
+        body = render_install()
+    elif step == "uninstall":
+        body = render_uninstall()
+    elif step == "uninstall_installer":
+        body = render_uninstall_installer()
+    elif step == "uninstall_done":
+        body = render_uninstall_done()
+    else:
+        body = render_done()
+
+    notice_html = ""
+    if notice:
+        notice_html = (
+            '<div class="vri-alert ' + esc(notice_kind) + '">' + notice + "</div>"
+        )
+    if uninstalling:
+        title = "Virtuous Raise Import Uninstall"
+        sub = "Remove the Virtuous Raise import from this church database."
+        pills = uninstall_step_pills(step)
+    else:
+        title = "Virtuous Raise Import Installer"
+        sub = "Configure settings, then install the morning-batch import."
+        pills = step_pills(step)
+    return "".join([
+        '<div class="vri-wrap">',
+        '<div class="vri-card">',
+        '<h1 class="vri-h1">' + esc(title) + "</h1>",
+        '<p class="vri-sub">' + esc(sub) + "</p>",
+        pills,
+        notice_html,
+        body,
+        "</div></div>",
+    ])
+
+SCRIPT = r"""
+<script>
+(function(){
+  function parseVriJson(txt){
+    var m=(txt||'').match(/<!--VRI_JSON-->([\s\S]*?)<!--\/VRI_JSON-->/);
+    try { return JSON.parse(m?m[1]:txt); } catch(e){ return null; }
+  }
+  function goStep(step, notice, noticeKind){
+    var url=window.location.pathname+'?step='+encodeURIComponent(step||'welcome');
+    if(notice){
+      url+='&notice='+encodeURIComponent(notice);
+      url+='&notice_kind='+encodeURIComponent(noticeKind||'info');
+    }
+    window.location=url;
+  }
+  function goHome(){ window.location='/'; }
+  function escHtml(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function showUninstallFinish(notice){
+    var wrap=document.querySelector('.vri-wrap .vri-card')||document.body;
+    var msg=escHtml(notice||'Installer removed.');
+    wrap.innerHTML=
+      '<h1 class="vri-h1">Virtuous Raise Import Uninstall</h1>'+
+      '<p class="vri-sub">Remove the Virtuous Raise import from this church database.</p>'+
+      '<div class="vri-steps"><span class="vri-step done">1. Uninstall</span>'+
+      '<span class="vri-step done">2. Installer</span>'+
+      '<span class="vri-step on">Done</span></div>'+
+      '<div class="vri-alert ok">'+msg+'</div>'+
+      '<p>Uninstall is complete.</p>'+
+      '<div class="vri-actions"><a class="btn btn-primary" href="/">Finish</a></div>';
+  }
+  function installerNameFromPath(){
+    var parts=String(window.location.pathname||'').split('/').filter(Boolean);
+    for(var i=0;i<parts.length;i++){
+      if(String(parts[i]).toLowerCase()==='pyscriptform' && parts[i+1]){
+        return decodeURIComponent(parts[i+1]);
+      }
+    }
+    return parts.length?decodeURIComponent(parts[parts.length-1]):'';
+  }
+  (function syncInstallerNameField(){
+    var field=document.getElementById('vri-installer-name');
+    if(!field) return;
+    var fromPath=installerNameFromPath();
+    if(fromPath) field.value=fromPath;
+  })();
+  function asSpecialContentList(payload){
+    if(Array.isArray(payload)) return payload;
+    if(!payload || typeof payload!=='object') return [];
+    if(Array.isArray(payload.files)) return payload.files;
+    if(Array.isArray(payload.items)) return payload.items;
+    if(Array.isArray(payload.value)) return payload.value;
+    if(Array.isArray(payload.data)) return payload.data;
+    return [];
+  }
+  function fTypeId(f){
+    if(!f) return null;
+    var v=(f.type!=null?f.type:(f.Type!=null?f.Type:(f.typeId!=null?f.typeId:f.TypeId)));
+    var n=parseInt(v,10);
+    return isNaN(n)?null:n;
+  }
+  function fId(f){
+    if(!f) return null;
+    var v=(f.id!=null?f.id:f.Id);
+    return v!=null?v:null;
+  }
+  function fName(f){
+    if(!f) return '';
+    return String(f.name!=null?f.name:(f.Name||''));
+  }
+  function findSpecialContentFile(files, name, typeId){
+    var want=String(name||'').toLowerCase();
+    var wantType=parseInt(typeId,10);
+    var match=null;
+    (files||[]).forEach(function(f){
+      if(fName(f).toLowerCase()!==want) return;
+      if(!isNaN(wantType) && fTypeId(f)===wantType) match=f;
+    });
+    return match;
+  }
+  function deleteSpecialContentTargets(targets){
+    // Prefer Display/ContentDelete (removes ContentKeywords) over CmsApi DELETE.
+    function resolveIds(){
+      var missing=(targets||[]).some(function(t){ return t.id==null || String(t.id)===''; });
+      if(!missing) return Promise.resolve(targets||[]);
+      return fetch('/api/v1/SpecialContentFiles',{
+        method:'GET',
+        credentials:'same-origin',
+        headers:{'Accept':'application/json'}
+      }).then(function(r){
+        if(!r.ok) throw new Error('Could not list Special Content ('+r.status+')');
+        return r.json();
+      }).then(function(payload){
+        var files=asSpecialContentList(payload);
+        return (targets||[]).map(function(t){
+          if(t.id!=null && String(t.id)!=='') return t;
+          var f=findSpecialContentFile(files, t.name, t.typeId);
+          if(!f) return t;
+          var copy={};
+          for(var k in t){ if(Object.prototype.hasOwnProperty.call(t,k)) copy[k]=t[k]; }
+          copy.id=fId(f);
+          if(fTypeId(f)!=null) copy.typeId=fTypeId(f);
+          return copy;
+        });
+      });
+    }
+    function deleteOne(t){
+      var name=String(t.name||'');
+      var id=t.id;
+      if(id==null || String(id)===''){
+        if(t.required) throw new Error('NOT FOUND: '+name+' (no content id)');
+        return Promise.resolve(name+': not found');
+      }
+      var paths=[
+        '/Display/ContentDelete/'+encodeURIComponent(id),
+        '/Manage/Display/ContentDelete/'+encodeURIComponent(id)
+      ];
+      var attempt=function(url){
+        return fetch(url,{
+          method:'GET',
+          credentials:'same-origin',
+          redirect:'follow'
+        }).then(function(r){
+          if(r.ok || (r.status>=300 && r.status<400)) return name+': deleted';
+          throw new Error('HTTP '+r.status);
+        });
+      };
+      return attempt(paths[0]).catch(function(){
+        return attempt(paths[1]);
+      }).catch(function(err){
+        throw new Error(
+          'Could not delete '+name+' (id '+id+'): '
+          +((err&&err.message)||err)
+        );
+      });
+    }
+    return resolveIds().then(function(list){
+      var chain=Promise.resolve();
+      var results=[];
+      list.forEach(function(t){
+        chain=chain.then(function(){
+          return deleteOne(t).then(function(line){ results.push(line); });
+        });
+      });
+      return chain.then(function(){ return results; });
+    });
+  }
+  function pidOf(row){
+    var v=row && (row.PeopleId!=null?row.PeopleId:row.peopleId);
+    var n=parseInt(v,10);
+    return isNaN(n)?0:n;
+  }
+  function nameOf(row){
+    return String((row && (row.Name!=null?row.Name:row.name))||'').trim();
+  }
+  function deceasedOf(row){
+    var v=row && (row.IsDeceased!=null?row.IsDeceased:row.isDeceased);
+    return !!v;
+  }
+  function bindPeoplePicker(picker){
+    if(!picker) return;
+    var input=picker.querySelector('.vri-people-search');
+    var hidden=picker.querySelector('.vri-people-id');
+    var selected=picker.querySelector('.vri-people-selected');
+    var results=picker.querySelector('.vri-people-results');
+    if(!input || !hidden || !selected || !results) return;
+    var timer=null;
+    function setSelected(pid, name){
+      hidden.value=String(pid||'');
+      if(pid && name){
+        selected.textContent='Selected: '+name+' (#'+pid+')';
+        selected.className='vri-selected on vri-people-selected';
+      } else if(pid){
+        selected.textContent='Selected: #'+pid;
+        selected.className='vri-selected on vri-people-selected';
+      } else {
+        selected.textContent='';
+        selected.className='vri-selected vri-people-selected';
+      }
+    }
+    function renderRows(rows){
+      results.innerHTML='';
+      if(!rows || !rows.length){
+        results.innerHTML='<div class="vri-ac-empty">No matches.</div>';
+        results.hidden=false;
+        return;
+      }
+      rows.forEach(function(row){
+        var pid=pidOf(row);
+        var name=nameOf(row);
+        if(!pid || !name) return;
+        var btn=document.createElement('button');
+        btn.type='button';
+        btn.className='vri-ac-item';
+        btn.innerHTML=name.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+          +'<span class="vri-ac-meta">PeopleId '+pid
+          +(deceasedOf(row)?' · deceased':'')+'</span>';
+        btn.addEventListener('click', function(){
+          var requireEmail=picker.getAttribute('data-require-email')==='1';
+          function accept(){
+            setSelected(pid, name);
+            input.value=name;
+            results.hidden=true;
+          }
+          if(!requireEmail){
+            accept();
+            return;
+          }
+          btn.disabled=true;
+          var fd=new FormData();
+          fd.set('action','check_person_email');
+          fd.set('people_id',String(pid));
+          fetch(window.location.pathname,{method:'POST',body:fd,credentials:'same-origin'})
+            .then(function(r){ return r.text(); })
+            .then(function(txt){
+              var data=parseVriJson(txt);
+              if(!data || data.ok===false || data.has_email===false){
+                alert((data&&data.notice)||'This person has no primary email address.');
+                return;
+              }
+              accept();
+            })
+            .catch(function(err){
+              alert((err&&err.message)||'Could not verify email address.');
+            })
+            .then(function(){ btn.disabled=false; });
+        });
+        results.appendChild(btn);
+      });
+      results.hidden=false;
+    }
+    function search(q){
+      results.innerHTML='<div class="vri-ac-status">Searching…</div>';
+      results.hidden=false;
+      fetch('/api/v1/People/Search/Autocomplete?q='+encodeURIComponent(q),{
+        method:'GET',
+        credentials:'same-origin',
+        headers:{'Accept':'application/json'}
+      }).then(function(r){
+        if(!r.ok) throw new Error('People search failed ('+r.status+')');
+        return r.json();
+      }).then(function(rows){
+        renderRows(Array.isArray(rows)?rows:[]);
+      }).catch(function(err){
+        results.innerHTML='<div class="vri-ac-empty">'
+          +((err&&err.message)||'Search failed')+'</div>';
+        results.hidden=false;
+      });
+    }
+    input.addEventListener('input', function(){
+      clearTimeout(timer);
+      var q=String(input.value||'').trim();
+      if(q.length<2){
+        results.innerHTML='';
+        results.hidden=true;
+        return;
+      }
+      timer=setTimeout(function(){ search(q); }, 250);
+    });
+    document.addEventListener('click', function(ev){
+      if(!results.contains(ev.target) && ev.target!==input){
+        results.hidden=true;
+      }
+    });
+  }
+  function bindPeopleSearch(){
+    var pickers=document.querySelectorAll('.vri-people-picker');
+    Array.prototype.forEach.call(pickers, bindPeoplePicker);
+  }
+  function bindEmailNoticeToggle(){
+    var cb=document.getElementById('vri-send-notices');
+    var box=document.getElementById('vri-email-people');
+    if(!cb || !box) return;
+    function sync(){
+      box.style.display=cb.checked?'':'none';
+    }
+    cb.addEventListener('change', sync);
+    sync();
+  }
+  document.addEventListener('submit', function(ev){
+    var form=ev.target;
+    if(!form || form.tagName!=='FORM' || !form.classList.contains('vri-form')) return;
+    ev.preventDefault();
+    if(form.classList.contains('vri-people-form')){
+      var pid=form.querySelector('.vri-people-id');
+      if(!pid || !String(pid.value||'').trim()){
+        alert(form.getAttribute('data-required-msg')||'Select a people record.');
+        return;
+      }
+    }
+    if(form.id==='vri-email-form'){
+      var sendCb=document.getElementById('vri-send-notices');
+      if(sendCb && sendCb.checked){
+        var toId=form.querySelector('input[name="to_people_id"]');
+        var fromId=form.querySelector('input[name="from_people_id"]');
+        if(!toId || !String(toId.value||'').trim()){
+          alert('Select who should receive success/failure email notices.');
+          return;
+        }
+        if(!fromId || !String(fromId.value||'').trim()){
+          alert('Select the sender (from) people record for email notices.');
+          return;
+        }
+      }
+    }
+    var body=new FormData(form);
+    var submitter=ev.submitter;
+    if(submitter && submitter.name){
+      body.set(submitter.name, submitter.value||'');
+    }
+    var btns=form.querySelectorAll('button[type="submit"],input[type="submit"]');
+    Array.prototype.forEach.call(btns, function(b){ b.disabled=true; });
+    fetch(window.location.pathname, {method:'POST', body:body, credentials:'same-origin'})
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        var data=parseVriJson(txt);
+        if(!data) throw new Error('Unexpected installer response');
+        if(data.ok===false){
+          goStep(data.step||'welcome', data.notice||'Request failed', data.notice_kind||'err');
+          return;
+        }
+        var chain=Promise.resolve();
+        if(data.delete_targets && data.delete_targets.length){
+          chain=chain.then(function(){
+            return deleteSpecialContentTargets(data.delete_targets);
+          }).catch(function(err){
+            throw new Error('Could not delete Special Content: '+((err&&err.message)||err));
+          });
+        }
+        if(data.finish_after_delete){
+          return chain.then(function(){
+            showUninstallFinish(data.notice||'Installer removed.');
+          });
+        }
+        return chain.then(function(){
+          goStep(data.step||'welcome', data.notice||'', data.notice_kind||'info');
+        });
+      }).catch(function(err){
+        Array.prototype.forEach.call(btns, function(b){ b.disabled=false; });
+        alert((err&&err.message)||err);
+      });
+  });
+  bindPeopleSearch();
+  bindEmailNoticeToggle();
+})();
+</script>
+"""
+
+# ========================= MAIN =========================
+try:
+    action = request_val("action").lower()
+    method = http_method()
+
+    if method == "post":
+        notice = ""
+        notice_kind = "info"
+        next_step = "welcome"
+        ok = True
+        delete_targets = None
+        finish_after_delete = False
+        if action == "check_person_email":
+            ok, msg = action_check_person_email(request_val("people_id"))
+            emit_json({
+                "ok": bool(ok),
+                "has_email": bool(ok),
+                "notice": msg,
+                "notice_kind": ("ok" if ok else "err"),
+            })
+        else:
+            if action == "save_api_key":
+                ok, msg = action_save_api_key(request_val("api_key"))
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "start_date" if ok else "api_key"
+            elif action == "save_start_date":
+                ok, msg = action_save_start_date(request_val("start_date"))
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "anonymous" if ok else "start_date"
+            elif action == "save_anonymous":
+                ok, msg = action_save_anonymous(request_val("people_id"))
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "email_notice" if ok else "anonymous"
+            elif action == "save_email_notice":
+                ok, msg = action_save_email_notice(
+                    request_val("send_notices"),
+                    request_val("to_people_id"),
+                    request_val("from_people_id"),
+                )
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "install" if ok else "email_notice"
+            elif action == "install":
+                ok, msg = action_install()
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "done" if ok else "install"
+            elif action == "uninstall":
+                ok, msg, delete_targets = action_uninstall()
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "uninstall_installer" if ok else "uninstall"
+            elif action == "uninstall_installer":
+                ok = True
+                notice, notice_kind = "Installer removed.", "ok"
+                next_step = "uninstall_done"
+                delete_targets = [installer_delete_target()]
+                finish_after_delete = True
+            elif action == "keep_installer":
+                ok = True
+                notice, notice_kind = "Installer kept.", "info"
+                next_step = "uninstall_done"
+            else:
+                ok = False
+                notice = "Unknown installer action."
+                notice_kind = "err"
+                next_step = resolve_step()
+            payload = {
+                "ok": bool(ok),
+                "step": next_step,
+                "notice": notice,
+                "notice_kind": notice_kind,
+            }
+            if finish_after_delete:
+                payload["finish_after_delete"] = True
+            if delete_targets:
+                payload["delete_targets"] = delete_targets
+            emit_json(payload)
+    else:
+        next_step = resolve_step()
+        notice = request_val("notice") or None
+        notice_kind = request_val("notice_kind") or "info"
+        if notice_kind not in ("info", "ok", "warn", "err"):
+            notice_kind = "info"
+        model.Title = (
+            "Virtuous Raise Import Uninstall"
+            if next_step in UNINSTALL_STEPS
+            else "Virtuous Raise Import Installer"
+        )
+        model.Header = ""
+        model.Styles = STYLES
+        model.Form = render_page(next_step, notice, notice_kind)
+        model.Script = SCRIPT
+
+except Exception:
+    err = "<pre style='color:red'>" + traceback.format_exc() + "</pre>"
+    if http_method() == "post":
+        emit_json({
+            "ok": False,
+            "step": "welcome",
+            "notice": traceback.format_exc(),
+            "notice_kind": "err",
+        })
+    else:
+        model.Form = err

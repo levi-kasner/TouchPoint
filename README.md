@@ -2,6 +2,15 @@
 
 Custom solutions for churches using the TouchPoint ChMS.
 
+## Projects
+
+| Folder | Purpose |
+|---|---|
+| [`ShellEditor/`](ShellEditor/) | Live shell editor for registration, giving, and login |
+| [`VirtuousRaiseImport/`](VirtuousRaiseImport/) | Virtuous Raise gift import into TouchPoint batches |
+
+---
+
 ## Shell Editor
 
 Source of truth: [`ShellEditor/`](ShellEditor/)
@@ -34,3 +43,32 @@ git push
 ```
 
 6. Optional release tag: `shell-editor-vX.Y.Z`
+
+---
+
+## Virtuous Raise Import
+
+Source of truth: [`VirtuousRaiseImport/`](VirtuousRaiseImport/)
+
+| Path | Purpose |
+|---|---|
+| `VirtuousRaiseImport/VirtuousRaiseImport` | Morning-batch import script |
+| `VirtuousRaiseImport/InstallVirtuousRaiseImport` | Packaged installer (upload this to churches) |
+| `VirtuousRaiseImport/build_installer.py` | Embeds the import script into the installer |
+| `VirtuousRaiseImport/DeleteImportData.sql` | Optional cleanup SQL for VRDI test data |
+
+Installer raw URL:
+
+`https://raw.githubusercontent.com/levi-kasner/TouchPoint/main/VirtuousRaiseImport/InstallVirtuousRaiseImport`
+
+### Publish an update
+
+1. Edit files under `VirtuousRaiseImport/`
+2. Run `python VirtuousRaiseImport/build_installer.py`
+3. From this repo root:
+
+```powershell
+git add VirtuousRaiseImport
+git commit -m "Update Virtuous Raise Import"
+git push
+```
