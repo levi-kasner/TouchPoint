@@ -9,6 +9,7 @@ anonymousIdSetting       = 'Virtuous Anonymous Giver Id'
 sendEmailNoticesSetting  = 'Virtuous Send Email Notices'  
 emailNoticeToSetting     = 'Virtuous Email Notice People Id'  
 emailNoticeSenderSetting = 'Virtuous Email Notices Sender Id'  
+overwriteContactSetting  = 'Virtuous Overwrite Contact Info'  
 apiKey                = model.Setting(apiKeySetting, '')  
 header           = { "Authorization": "Bearer " + apiKey,  
                      "Content-Type": "application/json",  
@@ -29,7 +30,9 @@ def IsTruthySetting(raw):
 anonymousId = ResolvePeopleIdSetting(anonymousIdSetting)  
 sendEmailNotices = IsTruthySetting(model.Setting(sendEmailNoticesSetting, ''))  
 emailNoticeToId = ResolvePeopleIdSetting(emailNoticeToSetting)  
-emailNoticeSenderId = ResolvePeopleIdSetting(emailNoticeSenderSetting)
+emailNoticeSenderId = ResolvePeopleIdSetting(emailNoticeSenderSetting)  
+# Unset defaults to true so existing installs keep prior overwrite behavior.  
+overwriteContactInfo = IsTruthySetting(model.Setting(overwriteContactSetting, 'true'))
 bundleTypeCode = 'VRDI'  
 bundleTypeId  = q.QuerySqlInt(  
     "select top 1 Id from lookup.BundleHeaderTypes where Code = '{0}'".format(bundleTypeCode)  
@@ -171,6 +174,35 @@ def ParseAmount(raw, negate):
   
 #### People --------------------------------------------------------------------  
   
+def _HasValue(val):  
+    return bool(val is not None and str(val).strip())  
+  
+def GetPersonContactInfo(pid):  
+    # Family address + person email/phone currently on the TouchPoint record.  
+    sql = (  
+        "select top 1 "  
+        "nullif(ltrim(rtrim(p.EmailAddress)), '') as EmailAddress, "  
+        "nullif(ltrim(rtrim(p.CellPhone)), '') as CellPhone, "  
+        "nullif(ltrim(rtrim(f.AddressLineOne)), '') as AddressLineOne, "  
+        "nullif(ltrim(rtrim(f.AddressLineTwo)), '') as AddressLineTwo, "  
+        "nullif(ltrim(rtrim(f.CityName)), '') as CityName, "  
+        "nullif(ltrim(rtrim(f.StateCode)), '') as StateCode, "  
+        "nullif(ltrim(rtrim(f.ZipCode)), '') as ZipCode "  
+        "from dbo.People p "  
+        "join dbo.Families f on f.FamilyId = p.FamilyId "  
+        "where p.PeopleId = {0}".format(int(pid))  
+    )  
+    for row in q.QuerySql(sql):  
+        return row  
+    return None  
+  
+def ShouldWriteField(raiseVal, existingVal, overwrite):  
+    if not _HasValue(raiseVal):  
+        return False  
+    if overwrite:  
+        return True  
+    return not _HasValue(existingVal)  
+  
 def GetOrCreatePerson(t):  
     m = t.metadata  
     donorId   = int(m[metaIndex["Donor Id"]])  
@@ -191,17 +223,40 @@ def GetOrCreatePerson(t):
     if not pid:  
         pid = model.FindPersonId(first, last, None, email, phone)  
     # 3. otherwise create  
+    isNew = False  
     if not pid:  
         pid = model.AddPerson(first, first, last, email)  
+        isNew = True  
   
-    # keep contact info current  
-    if addr1:   model.UpdateNamedField(pid, 'AddressLineOne', addr1)  
-    if addr2:   model.UpdateNamedField(pid, 'AddressLineTwo', addr2)  
-    if city:    model.UpdateNamedField(pid, 'CityName', city)  
-    if state:   model.UpdateNamedField(pid, 'StateCode', state)  
-    if zipCode: model.UpdateNamedField(pid, 'ZipCode', zipCode)  
-    if email:   model.UpdateNamedField(pid, 'EmailAddress', email)  
-    if phone:   model.UpdateNamedField(pid, 'CellPhone', phone)  
+    # New records always get Raise contact info. Existing matches honor the  
+    # overwrite setting (fill blanks only when overwrite is off).  
+    existing = None if isNew else GetPersonContactInfo(pid)  
+    overwrite = True if isNew else overwriteContactInfo  
+  
+    def existingField(name):  
+        if existing is None:  
+            return None  
+        return getattr(existing, name, None)  
+  
+    # Family address (UpdatePerson routes these fields to the Family record).  
+    addr = {}  
+    if ShouldWriteField(addr1, existingField('AddressLineOne'), overwrite):  
+        addr['addresslineone'] = addr1  
+    if ShouldWriteField(addr2, existingField('AddressLineTwo'), overwrite):  
+        addr['addresslinetwo'] = addr2  
+    if ShouldWriteField(city, existingField('CityName'), overwrite):  
+        addr['cityname'] = city  
+    if ShouldWriteField(state, existingField('StateCode'), overwrite):  
+        addr['statecode'] = state  
+    if ShouldWriteField(zipCode, existingField('ZipCode'), overwrite):  
+        addr['zipcode'] = zipCode  
+    if addr:  
+        model.UpdatePerson(pid, addr)  
+  
+    if ShouldWriteField(email, existingField('EmailAddress'), overwrite):  
+        model.UpdateNamedField(pid, 'EmailAddress', email)  
+    if ShouldWriteField(phone, existingField('CellPhone'), overwrite):  
+        model.UpdateNamedField(pid, 'CellPhone', phone)  
   
     # stamp the donor id so future matches hit step 1  
     model.AddExtraValueInt(pid, donorIdField, donorId)  

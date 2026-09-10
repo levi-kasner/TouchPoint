@@ -21,6 +21,7 @@ SETTING_API_KEY = "Virtuous API Key"
 SETTING_START_DATE = "Virtuous Import Start Date"
 SETTING_FROM_START = "Virtuous Import From Start Date"
 SETTING_ANONYMOUS_ID = "Virtuous Anonymous Giver Id"
+SETTING_OVERWRITE = "Virtuous Overwrite Contact Info"
 SETTING_SEND_EMAIL = "Virtuous Send Email Notices"
 SETTING_EMAIL_TO = "Virtuous Email Notice People Id"
 SETTING_EMAIL_SENDER = "Virtuous Email Notices Sender Id"
@@ -32,7 +33,7 @@ CONTENT_TYPE_PYTHON = 5  # Special Content TypeID for Python scripts
 
 STEPS = [
     "welcome", "batch_type", "api_key", "start_date",
-    "anonymous", "email_notice", "install", "done",
+    "anonymous", "overwrite", "email_notice", "install", "done",
 ]
 UNINSTALL_STEPS = ["uninstall", "uninstall_installer", "uninstall_done"]
 
@@ -41,6 +42,7 @@ ALL_SETTINGS = [
     SETTING_START_DATE,
     SETTING_FROM_START,
     SETTING_ANONYMOUS_ID,
+    SETTING_OVERWRITE,
     SETTING_SEND_EMAIL,
     SETTING_EMAIL_TO,
     SETTING_EMAIL_SENDER,
@@ -49,58 +51,64 @@ ALL_SETTINGS = [
 # ==== BEGIN EMBEDDED IMPORT (generated; do not edit) ====
 importBody = zlib.decompress(base64.b64decode(
     (
-        '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'
-        'lhofXeCS/wOD11pQ'
+        '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'
     )
 )).decode('utf-8')
 # ==== END EMBEDDED IMPORT ====
@@ -328,6 +336,13 @@ def find_bundle_header_type():
 def send_email_notices_enabled():
     return get_setting(SETTING_SEND_EMAIL).lower() in ("true", "1", "yes")
 
+def overwrite_contact_info_enabled():
+    # Default on when unset (matches historical import behavior).
+    raw = get_setting(SETTING_OVERWRITE)
+    if raw == "":
+        return True
+    return raw.lower() in ("true", "1", "yes")
+
 def email_settings_ok():
     # Enabled => both people required with primary email. Disabled/empty => ok.
     if not send_email_notices_enabled():
@@ -346,6 +361,8 @@ def settings_complete():
     if not get_setting(SETTING_START_DATE):
         return False
     if not person_exists(get_setting(SETTING_ANONYMOUS_ID)):
+        return False
+    if get_setting(SETTING_OVERWRITE) == "":
         return False
     return email_settings_ok()
 
@@ -370,6 +387,8 @@ def resolve_step():
         return "start_date"
     if not person_exists(get_setting(SETTING_ANONYMOUS_ID)):
         return "anonymous"
+    if get_setting(SETTING_OVERWRITE) == "":
+        return "overwrite"
     if send_email_notices_enabled() and not email_settings_ok():
         return "email_notice"
     if not (python_exists(IMPORT_SCRIPT_NAME) and morning_batch_wired()):
@@ -466,6 +485,13 @@ def action_save_anonymous(people_id):
         return False, "PeopleId {0} was not found.".format(pid)
     set_setting(SETTING_ANONYMOUS_ID, str(pid))
     return True, "Anonymous giver set to {0}.".format(person_label(pid))
+
+def action_save_overwrite(overwrite):
+    enabled = str(overwrite or "").strip().lower() in ("1", "true", "yes", "on")
+    set_setting(SETTING_OVERWRITE, "true" if enabled else "false")
+    if enabled:
+        return True, "Overwrite contact info enabled."
+    return True, "Overwrite contact info disabled (fill blanks only)."
 
 def action_save_email_notice(send_notices, to_people_id, from_people_id):
     enabled = str(send_notices or "").strip().lower() in ("1", "true", "yes", "on")
@@ -653,8 +679,9 @@ def step_pills(current):
         "api_key": "3. API Key",
         "start_date": "4. Start Date",
         "anonymous": "5. Anonymous Giver",
-        "email_notice": "6. Email Notices",
-        "install": "7. Install",
+        "overwrite": "6. Contact Info",
+        "email_notice": "7. Email Notices",
+        "install": "8. Install",
         "done": "Done",
     }
     html = ['<div class="vri-steps">']
@@ -699,6 +726,8 @@ def render_welcome():
         "<li>Set the permanent import start-date floor "
         "(first run automatically reaches back to that date)</li>"
         "<li>Choose the people record used for anonymous gifts</li>"
+        "<li>Choose whether Raise may overwrite existing TouchPoint "
+        "address, email, and phone</li>"
         "<li>Optionally enable success/failure email notices and choose to/from people</li>"
         "<li>Install <span class='vri-code'>VirtuousRaiseImport</span> and wire it into "
         "<span class='vri-code'>MorningBatch</span></li>"
@@ -837,6 +866,28 @@ def render_anonymous():
         "Select a people record for anonymous gifts.",
     )
 
+def render_overwrite():
+    enabled = overwrite_contact_info_enabled()
+    return (
+        "<p>When a Raise donor matches an existing TouchPoint person, choose whether "
+        "Raise values may replace address, email, and phone already on the record.</p>"
+        '<div class="vri-alert info">Address is always written to the '
+        "<strong>family</strong> address. New people always receive Raise contact info. "
+        "When overwrite is off, existing people only get blank fields filled.</div>"
+        '<form method="post" class="vri-form" id="vri-overwrite-form">'
+        '<input type="hidden" name="step" value="overwrite" />'
+        '<input type="hidden" name="action" value="save_overwrite" />'
+        '<label class="vri-check">'
+        '<input type="checkbox" name="overwrite_contact" id="vri-overwrite-contact" '
+        'value="1"' + (" checked" if enabled else "") + " />"
+        "<span>Overwrite existing TouchPoint address, email, and phone with Raise "
+        "values</span>"
+        "</label>"
+        '<div class="vri-actions">'
+        '<button class="btn btn-primary" type="submit">Save and continue</button>'
+        "</div></form>"
+    )
+
 def render_email_notice():
     enabled = send_email_notices_enabled()
     people_style = "" if enabled else " display:none;"
@@ -861,6 +912,19 @@ def render_email_notice():
         '<div class="vri-actions">'
         '<button class="btn btn-primary" type="submit">Save and continue</button>'
         "</div></form>"
+    )
+
+def overwrite_summary_line():
+    raw = get_setting(SETTING_OVERWRITE)
+    if raw == "":
+        value = "(not set)"
+    elif overwrite_contact_info_enabled():
+        value = "true"
+    else:
+        value = "false"
+    return (
+        "<li><strong>" + esc(SETTING_OVERWRITE) + ":</strong> "
+        + esc(value) + "</li>"
     )
 
 def email_summary_lines():
@@ -900,6 +964,7 @@ def render_install():
         + esc(get_setting(SETTING_START_DATE) or "(missing)") + "</li>"
         "<li><strong>" + esc(SETTING_ANONYMOUS_ID) + ":</strong> "
         + esc(person_label(anon) or "(missing)") + "</li>"
+        + overwrite_summary_line()
         + email_summary_lines()
         + "</ul>"
         '<form method="post" class="vri-form" id="vri-install-form">'
@@ -929,6 +994,7 @@ def render_done():
         "<li><strong>Batch type:</strong> " + esc(batch_summary) + "</li>"
         "<li><strong>Anonymous giver:</strong> "
         + esc(person_label(anon) or "(not set)") + "</li>"
+        + overwrite_summary_line()
         + email_summary_lines()
         + "<li><strong>Start date floor:</strong> "
         + esc(get_setting(SETTING_START_DATE) or "(not set)") + "</li>"
@@ -1000,6 +1066,8 @@ def render_page(step, notice=None, notice_kind="info"):
         body = render_start_date()
     elif step == "anonymous":
         body = render_anonymous()
+    elif step == "overwrite":
+        body = render_overwrite()
     elif step == "email_notice":
         body = render_email_notice()
     elif step == "install":
@@ -1419,7 +1487,11 @@ try:
             elif action == "save_anonymous":
                 ok, msg = action_save_anonymous(request_val("people_id"))
                 notice, notice_kind = msg, ("ok" if ok else "err")
-                next_step = "email_notice" if ok else "anonymous"
+                next_step = "overwrite" if ok else "anonymous"
+            elif action == "save_overwrite":
+                ok, msg = action_save_overwrite(request_val("overwrite_contact"))
+                notice, notice_kind = msg, ("ok" if ok else "err")
+                next_step = "email_notice" if ok else "overwrite"
             elif action == "save_email_notice":
                 ok, msg = action_save_email_notice(
                     request_val("send_notices"),
