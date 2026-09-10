@@ -472,10 +472,16 @@ def action_save_start_date(start_date):
     if parsed is None:
         return False, 'Could not parse "{0}" as a date.'.format(start_date)
     normalized = parsed.ToString("yyyy-MM-dd")
+    previous = get_setting(SETTING_START_DATE)
     set_setting(SETTING_START_DATE, normalized)
-    # Always reach back to the start date on the first import run after install.
-    set_setting(SETTING_FROM_START, "true")
-    return True, "Start date saved. First import will reach back to {0}.".format(normalized)
+    # Only trigger a one-time reachback when the floor actually changes. Clicking
+    # through this step with the same date must not re-arm Virtuous Import From Start Date.
+    if previous != normalized:
+        set_setting(SETTING_FROM_START, "true")
+        return True, (
+            "Start date saved. Next import will reach back to {0}.".format(normalized)
+        )
+    return True, "Start date unchanged ({0}).".format(normalized)
 
 def action_save_anonymous(people_id):
     pid = parse_people_id(people_id)
@@ -724,7 +730,7 @@ def render_welcome():
         '<span class="vri-code">' + esc(BUNDLE_TYPE_CODE) + "</span> exists</li>"
         "<li>Collect the Virtuous / Raise API key</li>"
         "<li>Set the permanent import start-date floor "
-        "(first run automatically reaches back to that date)</li>"
+        "(changing it arms a one-time reachback to that date)</li>"
         "<li>Choose the people record used for anonymous gifts</li>"
         "<li>Choose whether Raise may overwrite existing TouchPoint "
         "address, email, and phone</li>"
@@ -802,9 +808,10 @@ def render_start_date():
     cur_date = get_setting(SETTING_START_DATE)
     return (
         "<p>Choose how far back the import should ever look for gifts.</p>"
-        '<div class="vri-alert info">The first import will reach back to this date. '
-        "Later runs use the normal lookback windows and will not go earlier than this "
-        "date.</div>"
+        '<div class="vri-alert info">Changing this date arms a one-time reachback to '
+        "the new floor on the next import. Leaving it unchanged (for example when "
+        "editing other settings) does not re-arm that lookback. Later runs use the "
+        "normal lookback windows and will not go earlier than this date.</div>"
         '<form method="post" class="vri-form" id="vri-start-form">'
         '<input type="hidden" name="step" value="start_date" />'
         '<input type="hidden" name="action" value="save_start_date" />'
