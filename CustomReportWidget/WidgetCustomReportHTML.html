@@ -1,0 +1,242 @@
+<div id="{{WidgetId}}-section" class="box widget-report widget-report--modern">
+    <div class="box-title widget-report__header">
+        <h5 class="widget-report__title">{{WidgetName}}</h5>
+
+        <div class="widget-report__actions">
+            <a href="{{excelUrl}}" target="_blank" title="Export to Excel" class="widget-report__icon-btn">
+                <i class="fa fa-file-excel-o"></i>
+            </a>
+            <a href="{{reportUrl}}" target="_blank" title="Open in new tab" class="widget-report__icon-btn">
+                <i class="fa fa-external-link"></i>
+            </a>
+            {{#if isAdmin}}
+            <a href="{{editUrl}}" target="_blank" title="Edit custom report" class="widget-report__icon-btn">
+                <i class="fa fa-pencil"></i>
+            </a>
+            {{/if}}
+        </div>
+
+        <a href="{{searchUrl}}" class="widget-report__badge">{{count}}</a>
+    </div>
+
+    <div class="box-content widget-report__content">
+        <iframe id="{{WidgetId}}-rpt" src="{{reportUrl}}" class="widget-report__frame" scrolling="no"></iframe>
+    </div>
+</div>
+
+<style>
+    /* ---- Card shell ---- */
+    .widget-report--modern {
+        --wr-accent: #003f72;
+        --wr-accent-light: #0a6bb3;
+        --wr-border: #e6eaf0;
+        --wr-text: #1c2733;
+        --wr-text-muted: #6b7686;
+        --wr-surface-hover: rgba(255, 255, 255, 0.75);
+
+        background: #ffffff;
+        border: 1px solid var(--wr-border);
+        border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 8px rgba(16, 24, 40, 0.03);
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+        transition: box-shadow 0.2s ease;
+    }
+
+    .widget-report--modern:hover {
+        box-shadow: 0 2px 4px rgba(16, 24, 40, 0.06), 0 4px 16px rgba(16, 24, 40, 0.05);
+    }
+
+    /* ---- Header ---- */
+    .widget-report__header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 13px 16px;
+        border-bottom: 2px solid rgba(0, 63, 114, 0.16);
+        background: linear-gradient(180deg, #eef4fa 0%, #e4edf6 100%);
+    }
+
+    .widget-report__title {
+        margin: 0 !important;
+        font-size: 14.5px !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.01em !important;
+        color: var(--wr-accent) !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    .widget-report__actions {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: 6px;
+    }
+
+    .widget-report__icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        color: rgba(0, 63, 114, 0.65);
+        text-decoration: none;
+        font-size: 13px;
+        transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .widget-report__icon-btn:hover {
+        background: var(--wr-surface-hover);
+        color: var(--wr-accent);
+        box-shadow: 0 1px 3px rgba(0, 63, 114, 0.15);
+    }
+
+    .widget-report__badge {
+        margin-left: auto;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 24px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--wr-accent), var(--wr-accent-light));
+        color: #fff !important;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 1px 3px rgba(0, 63, 114, 0.3);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .widget-report__badge:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 8px rgba(0, 63, 114, 0.35);
+    }
+
+    /* ---- Body / iframe ---- */
+    .widget-report__content {
+        padding: 0;
+        background: #fff;
+    }
+
+    .widget-report__frame {
+        width: 100%;
+        display: block;
+        border: none;
+        height: 120px;
+    }
+</style>
+
+<script>
+    (function () {
+        var MAXH = 215;
+        var iframe = document.getElementById("{{WidgetId}}-rpt");
+
+        var NAME_HEADERS = ["first", "goesby", "nick", "last", "middle", "name", "name2"];
+
+        function stripChrome() {
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            if (!doc) return;
+
+            // hide page chrome
+            ["#top-navbar", "#page-header", "#contact-footer", "#footer", ".snackbar", "#empty-dialog"].forEach(function (sel) {
+                var el = doc.querySelector(sel); if (el) el.style.display = "none";
+            });
+            var links = doc.getElementById("reportlinks"); if (links) links.style.display = "none";
+
+            // hide developer-only "@qtagid: N" line
+            var qtag = doc.querySelectorAll(".report.box > div:not(.box-content)");
+            for (var k = 0; k < qtag.length; k++) { qtag[k].style.display = "none"; }
+
+            // locate + hide the PeopleId column, and remember its index
+            var pidIndex = -1;
+            var headers = doc.querySelectorAll(".report table tr th");
+            for (var i = 0; i < headers.length; i++) {
+                if ((headers[i].textContent || "").trim().toLowerCase() === "peopleid") {
+                    pidIndex = i; headers[i].style.display = "none";
+                }
+            }
+
+            var firstVisible = (pidIndex === 0) ? 1 : 0;
+            var firstHeader = headers[firstVisible]
+                ? (headers[firstVisible].textContent || "").trim().toLowerCase() : "";
+            var linkName = NAME_HEADERS.indexOf(firstHeader) !== -1;
+
+            // process data rows
+            var rows = doc.querySelectorAll(".report table tr");
+            for (var r = 0; r < rows.length; r++) {
+                var cells = rows[r].querySelectorAll("td");
+                if (!cells.length) continue;
+
+                // hide "Count = N rows" / "Displaying N of N rows" footer row
+                var txt = (rows[r].textContent || "").trim();
+                if (/^Count = \d+ rows$/.test(txt) || /^Displaying \d+ of \d+ rows$/.test(txt)) {
+                    rows[r].style.display = "none"; continue;
+                }
+
+                var pid = (pidIndex >= 0 && cells[pidIndex])
+                    ? (cells[pidIndex].textContent || "").trim() : "";
+                if (pidIndex >= 0 && cells[pidIndex]) cells[pidIndex].style.display = "none";
+
+                if (linkName && pid && cells[firstVisible]) {
+                    var c = cells[firstVisible];
+                    if (!c.querySelector("a")) {
+                        c.innerHTML = "<a href='/Person2/" + pid +
+                            "' target='_blank'>" + c.innerHTML + "</a>";
+                    }
+                }
+            }
+
+            // modernized table look, injected into the iframe document
+            if (!doc.getElementById("widget-sticky-style")) {
+                var style = doc.createElement("style");
+                style.id = "widget-sticky-style";
+                style.textContent =
+                    ".report.box { border:0; box-shadow:none; margin:0; padding:0; background:#fff; }" +
+                    ".report .box-content { padding:0; margin:0; }" +
+                    ".report .table-responsive { overflow:visible; }" +
+                    ".report table {" +
+                    "  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif;" +
+                    "  font-size:13px; color:#1c2733; border-collapse:collapse; width:100%;" +
+                    "}" +
+                    ".report table thead th {" +
+                    "  position:sticky; top:0; background:#eef2f6; z-index:2;" +
+                    "  text-transform:uppercase; letter-spacing:.04em; font-size:11px; font-weight:700;" +
+                    "  color:#1c2733; padding:9px 14px; text-align:left;" +
+                    "  box-shadow: inset 0 -2px 0 #c7d2de;" +
+                    "}" +
+                    ".report table tbody td {" +
+                    "  padding:9px 14px; border-bottom:1px solid #eef1f5;" +
+                    "}" +
+                    ".report table tbody tr:nth-child(even) { background:#fbfcfd; }" +
+                    ".report table tbody tr:hover { background:#f0f5fa; }" +
+                    ".report table tbody tr td a { color:#003f72; font-weight:500; text-decoration:none; }" +
+                    ".report table tbody tr td a:hover { text-decoration:underline; }" +
+                    ".report table tfoot { display:none; }";
+                doc.head.appendChild(style);
+            }
+            if (doc.body) { doc.body.style.paddingTop = "0"; doc.body.style.margin = "0"; }
+            var main = doc.getElementById("main"); if (main) { main.style.padding = "0"; }
+
+            // size to content, capped at MAXH
+            var box = doc.querySelector(".report.box") || doc.body;
+            var contentH = box.scrollHeight + 2;
+            if (contentH > MAXH) {
+                iframe.style.height = MAXH + "px";
+                iframe.setAttribute("scrolling", "yes");
+            } else {
+                iframe.style.height = contentH + "px";
+                iframe.setAttribute("scrolling", "no");
+            }
+        }
+
+        iframe.addEventListener("load", stripChrome);
+        setTimeout(stripChrome, 400);
+        setTimeout(stripChrome, 1200);
+    })();
+</script>
